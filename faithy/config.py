@@ -55,6 +55,12 @@ class Config:
     persona_name: str = field(
         default_factory=lambda: os.getenv("PERSONA_NAME", "faithy")
     )
+    debounce_delay: float = field(
+        default_factory=lambda: float(os.getenv("DEBOUNCE_DELAY", "3.0"))
+    )
+    conversation_expiry: float = field(
+        default_factory=lambda: float(os.getenv("CONVERSATION_EXPIRY", "300.0"))
+    )
 
     # Data directory
     data_dir: Path = field(

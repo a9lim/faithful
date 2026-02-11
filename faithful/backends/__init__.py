@@ -9,7 +9,7 @@ from .ollama_backend import OllamaBackend
 from .openai_backend import OpenAIBackend
 
 if TYPE_CHECKING:
-    from faithy.config import Config
+    from faithful.config import Config
     from .base import Backend
 
 _BACKENDS: dict[str, type[Backend]] = {

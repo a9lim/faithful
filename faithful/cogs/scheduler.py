@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 from discord.ext import commands, tasks
 
 if TYPE_CHECKING:
-    from faithy.bot import Faithy
+    from faithful.bot import Faithful
 
-log = logging.getLogger("faithy.scheduler")
+log = logging.getLogger("faithful.scheduler")
 
 # Range for random interval between spontaneous messages (in seconds)
 # 1–2 messages per day → interval roughly 12–24 hours
@@ -25,7 +25,7 @@ MAX_INTERVAL = 24 * 60 * 60  # 24 hours
 class Scheduler(commands.Cog):
     """Sends unprompted messages to configured channels."""
 
-    def __init__(self, bot: Faithy) -> None:
+    def __init__(self, bot: Faithful) -> None:
         self.bot = bot
         self._started = False
         self._state_file = self.bot.config.data_dir / "scheduler_state.json"
@@ -113,5 +113,5 @@ class Scheduler(commands.Cog):
         await self.bot.wait_until_ready()
 
 
-async def setup(bot: Faithy) -> None:
+async def setup(bot: Faithful) -> None:
     await bot.add_cog(Scheduler(bot))

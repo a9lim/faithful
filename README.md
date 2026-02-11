@@ -1,4 +1,4 @@
-# Faithy
+# Faithful
 
 A Discord bot that reads a corpus of example messages and emulates the author's tone, mannerisms, and typing style. It responds when mentioned, and can optionally chime in on its own. 
 
@@ -27,7 +27,7 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
 
 ```bash
 git clone <this-repo-url>
-cd faithy
+cd faithful
 pip install .
 ```
 
@@ -48,7 +48,7 @@ cp .env.example .env
 ### 3. Run
 
 ```bash
-python -m faithy
+python -m faithful
 ```
 
 ## Commands
@@ -104,7 +104,7 @@ Upload via `/upload` or add individually with `/add_message`.
 
 ## Configuration
 
-The bot is configured via environment variables. See [.env.example](file:///home/azumi/Documents/antigravity/faithy/.env.example) for a full list of available options.
+The bot is configured via environment variables. See [.env.example](file:///home/azumi/Documents/antigravity/faithful/.env.example) for a full list of available options.
 
 ### General Settings
 
@@ -113,7 +113,7 @@ The bot is configured via environment variables. See [.env.example](file:///home
 | `DISCORD_TOKEN` | Your Discord bot token | (Required) |
 | `ADMIN_USER_ID` | Your Discord user ID | (Required) |
 | `ADMIN_ONLY_UPLOAD` | If `True`, only the admin can upload/add messages | `True` |
-| `PERSONA_NAME` | The name of the person being emulated | `faithy` |
+| `PERSONA_NAME` | The name of the person being emulated | `faithful` |
 | `ACTIVE_BACKEND` | Text generation backend: `markov`, `ollama`, or `openai` | `markov` |
 
 ### LLM Specific Settings
@@ -137,12 +137,12 @@ The bot is configured via environment variables. See [.env.example](file:///home
 ## Project Structure
 
 ```
-faithy/
+faithful/
 ├── pyproject.toml         # Dependencies and project metadata
 ├── .env.example           # Environment variable template
 ├── .gitignore
 ├── README.md
-└── faithy/                # Main package
+└── faithful/                # Main package
     ├── __main__.py        # Entry point
     ├── bot.py             # Discord bot class
     ├── config.py          # Configuration loader

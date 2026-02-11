@@ -11,18 +11,15 @@ import discord
 from discord.ext import commands
 
 if TYPE_CHECKING:
-    from faithy.bot import Faithy
+    from faithful.bot import Faithful
 
-log = logging.getLogger("faithy.chat")
-
-# How long to wait for more messages before responding (seconds)
-# Moved to Config: DEBOUNCE_DELAY
+log = logging.getLogger("faithful.chat")
 
 
 class Chat(commands.Cog):
     """Listens to messages and responds in-character."""
 
-    def __init__(self, bot: Faithy) -> None:
+    def __init__(self, bot: Faithful) -> None:
         self.bot = bot
         # Tracks pending debounce tasks per channel: {channel_id: asyncio.Task}
         self._pending: dict[int, asyncio.Task] = {}
@@ -219,5 +216,5 @@ class Chat(commands.Cog):
         self._pending[channel_id] = task
 
 
-async def setup(bot: Faithy) -> None:
+async def setup(bot: Faithful) -> None:
     await bot.add_cog(Chat(bot))

@@ -61,6 +61,20 @@ class Config:
     conversation_expiry: float = field(
         default_factory=lambda: float(os.getenv("CONVERSATION_EXPIRY", "300.0"))
     )
+    llm_sample_size: int = field(
+        default_factory=lambda: int(os.getenv("LLM_SAMPLE_SIZE", "300"))
+    )
+    max_context_messages: int = field(
+        default_factory=lambda: int(os.getenv("MAX_CONTEXT_MESSAGES", "20"))
+    )
+    system_prompt_template: str = field(
+        default_factory=lambda: os.getenv(
+            "SYSTEM_PROMPT_TEMPLATE",
+            "### Example messages from {name}:\n"
+            "{examples}\n\n"
+            "You are {name}. Use the examples to understand {name}'s personality, tone, and style. Write exactly like {name}. Prioritize responding to the current conversation while maintaining character. Do not cut off mid-sentence."
+        )
+    )
 
     # Data directory
     data_dir: Path = field(
@@ -77,3 +91,20 @@ class Config:
 
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Basic Validation
+        if self.debounce_delay < 0:
+            log.warning("DEBOUNCE_DELAY is negative. Resetting to 3.0.")
+            self.debounce_delay = 3.0
+        
+        if not (0 <= self.reply_probability <= 1):
+            log.warning("REPLY_PROBABILITY must be between 0 and 1. Clamping.")
+            self.reply_probability = max(0.0, min(1.0, self.reply_probability))
+        
+        if self.llm_sample_size < 1:
+            log.warning("LLM_SAMPLE_SIZE must be at least 1. Resetting to 300.")
+            self.llm_sample_size = 300
+
+        if self.max_context_messages < 0:
+            log.warning("MAX_CONTEXT_MESSAGES cannot be negative. Resetting to 20.")
+            self.max_context_messages = 20

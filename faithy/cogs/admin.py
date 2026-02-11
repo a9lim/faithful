@@ -41,16 +41,16 @@ class Admin(commands.Cog):
 
     @app_commands.command(
         name="upload",
-        description="Upload a .txt or .json file of example messages.",
+        description="Upload a .txt file of example messages.",
     )
     @app_commands.describe(file="A file with example messages")
     @is_admin()
     async def upload(
         self, interaction: discord.Interaction, file: discord.Attachment
     ) -> None:
-        if not (file.filename.endswith(".txt") or file.filename.endswith(".json")):
+        if not file.filename.endswith(".txt"):
             await interaction.response.send_message(
-                "❌ Please upload a `.txt` or `.json` file.", ephemeral=True
+                "❌ Please upload a `.txt` file.", ephemeral=True
             )
             return
 
@@ -207,11 +207,42 @@ class Admin(commands.Cog):
             f"**Messages:** {self.bot.store.count}",
             f"**Persona:** {cfg.persona_name}",
             f"**Reply probability:** {cfg.reply_probability:.1%}",
+            f"**Debounce delay:** {cfg.debounce_delay}s",
+            f"**Context limit:** {cfg.max_context_messages}",
+            f"**Sample size:** {cfg.llm_sample_size}",
             f"**Spontaneous channels:** {len(cfg.spontaneous_channels)}",
         ]
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True
         )
+
+    # ── /generate_test ───────────────────────────────────
+
+    @app_commands.command(
+        name="generate_test",
+        description="Trigger a test response based on a prompt.",
+    )
+    @app_commands.describe(prompt="The prompt to test against")
+    @is_admin()
+    async def generate_test(
+        self, interaction: discord.Interaction, prompt: str
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        try:
+            response = await self.bot.backend.generate(
+                prompt=prompt,
+                examples=self.bot.store.get_all_text(),
+                recent_context=[],  # No context for manual test
+            )
+            if response:
+                await interaction.followup.send(
+                    f"**Prompt:** {prompt}\n**Response:** {response}",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send("⚠️ No response generated.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
     # ── /download_messages ───────────────────────────────
 

@@ -131,8 +131,11 @@ class Chat(commands.Cog):
                 )
 
             if response:
-                # Split by the special token
-                parts = response.split("<SPLIT>")
+                # Normalize legacy <SPLIT> to newlines (just in case)
+                response = response.replace("<SPLIT>", "\n")
+
+                # Split by newlines
+                parts = response.split("\n")
 
                 for part in parts:
                     part = part.strip()
@@ -152,11 +155,15 @@ class Chat(commands.Cog):
                         part = part[split_idx:].strip()
                     chunks.append(part)
 
-                    for chunk in chunks:
+                    for i, chunk in enumerate(chunks):
                         # Safety Check 2: Ensure chunk ends with sentence terminator
                         # This prevents cutoff mid-sentence if LLM ran out of tokens
+                        # WE ONLY ENFORCE THIS FOR INTERMEDIATE CHUNKS.
+                        # The final chunk is allowed to end abruptly (or naturally without punctuation).
+                        is_last = (i == len(chunks) - 1)
                         valid_endings = ('.', '!', '?', '~', '"', ')', '*', '>', ']', '}')
-                        if not chunk.endswith(valid_endings):
+                        
+                        if not is_last and not chunk.endswith(valid_endings):
                             # Try to find the last valid ending
                             last_punc = -1
                             for punc in valid_endings:

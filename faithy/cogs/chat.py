@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("faithy.chat")
 
 # How long to wait for more messages before responding (seconds)
-DEBOUNCE_DELAY = 3.0
+# Moved to Config: DEBOUNCE_DELAY
 
 
 class Chat(commands.Cog):
@@ -46,7 +46,10 @@ class Chat(commands.Cog):
         if message.reference and message.reference.resolved:
             ref = message.reference.resolved
             if isinstance(ref, discord.Message) and ref.author == self.bot.user:
-                return True
+                # Only respond if the message being replied to isn't too old
+                from discord.utils import utcnow
+                age = (utcnow() - ref.created_at).total_seconds()
+                return age < self.bot.config.conversation_expiry
         return False
 
     async def _debounced_respond(self, channel: discord.abc.Messageable, channel_id: int) -> None:
@@ -55,7 +58,7 @@ class Chat(commands.Cog):
         If cancelled (because a new message arrived), this coroutine exits silently.
         """
         try:
-            await asyncio.sleep(DEBOUNCE_DELAY)
+            await asyncio.sleep(self.bot.config.debounce_delay)
         except asyncio.CancelledError:
             return
         finally:
@@ -187,7 +190,11 @@ class Chat(commands.Cog):
         if len(history_msgs) >= 2:
             prev_msg = history_msgs[-2]
             if prev_msg.author == self.bot.user:
-                in_conversation = True
+                # Check if it's been too long since our last message
+                from discord.utils import utcnow
+                age = (utcnow() - prev_msg.created_at).total_seconds()
+                if age < self.bot.config.conversation_expiry:
+                    in_conversation = True
 
         # Decide whether to respond
         is_dm = message.guild is None

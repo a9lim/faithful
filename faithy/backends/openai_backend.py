@@ -28,6 +28,7 @@ class OpenAIBackend(BaseLLMBackend):
         response = await self._client.chat.completions.create(
             model=self.config.openai_model,
             messages=messages,
-            max_tokens=1024,
+            max_tokens=self.config.llm_max_tokens,
+            temperature=self.config.llm_temperature,
         )
         return (response.choices[0].message.content or "").strip()

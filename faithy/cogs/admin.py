@@ -31,6 +31,22 @@ def is_admin():
     return app_commands.check(predicate)
 
 
+def can_upload():
+    """Decorator for commands that respect the ADMIN_ONLY_UPLOAD setting."""
+
+    async def predicate(interaction: discord.Interaction) -> bool:
+        bot: Faithy = interaction.client  # type: ignore[assignment]
+        if bot.config.admin_only_upload:
+            if interaction.user.id != bot.config.admin_user_id:
+                await interaction.response.send_message(
+                    "⛔ Only the administrator can perform this action.", ephemeral=True
+                )
+                return False
+        return True
+
+    return app_commands.check(predicate)
+
+
 class Admin(commands.Cog):
     """Admin-only commands for managing the bot."""
 
@@ -44,7 +60,7 @@ class Admin(commands.Cog):
         description="Upload a .txt file of example messages.",
     )
     @app_commands.describe(file="A file with example messages")
-    @is_admin()
+    @can_upload()
     async def upload(
         self, interaction: discord.Interaction, file: discord.Attachment
     ) -> None:
@@ -82,7 +98,7 @@ class Admin(commands.Cog):
         description="Add a single example message.",
     )
     @app_commands.describe(text="The example message to add")
-    @is_admin()
+    @can_upload()
     async def add_message(
         self, interaction: discord.Interaction, text: str
     ) -> None:
@@ -129,7 +145,7 @@ class Admin(commands.Cog):
         description="Remove an example message by its index number.",
     )
     @app_commands.describe(index="1-based index of the message to remove")
-    @is_admin()
+    @can_upload()
     async def remove_message(
         self, interaction: discord.Interaction, index: int
     ) -> None:
@@ -153,7 +169,7 @@ class Admin(commands.Cog):
         name="clear_messages",
         description="Remove ALL example messages.",
     )
-    @is_admin()
+    @can_upload()
     async def clear_messages(self, interaction: discord.Interaction) -> None:
         count = self.bot.store.clear_messages()
         await self.bot.refresh_backend()
@@ -210,6 +226,8 @@ class Admin(commands.Cog):
             f"**Debounce delay:** {cfg.debounce_delay}s",
             f"**Context limit:** {cfg.max_context_messages}",
             f"**Sample size:** {cfg.llm_sample_size}",
+            f"**LLM Temp:** {cfg.llm_temperature}",
+            f"**LLM Max Tokens:** {cfg.llm_max_tokens}",
             f"**Spontaneous channels:** {len(cfg.spontaneous_channels)}",
         ]
         await interaction.response.send_message(

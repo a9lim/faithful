@@ -25,5 +25,9 @@ class OllamaBackend(BaseLLMBackend):
         response = await self._client.chat(
             model=self.config.ollama_model,
             messages=messages,
+            options={
+                "temperature": self.config.llm_temperature,
+                "num_predict": self.config.llm_max_tokens,
+            },
         )
         return response["message"]["content"].strip()

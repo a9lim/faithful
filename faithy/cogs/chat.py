@@ -113,44 +113,48 @@ class Chat(commands.Cog):
                     # Normalize legacy <SPLIT> to newlines
                     response = response.replace("<SPLIT>", "\n")
 
-                    # Split by newlines
-                    parts = response.split("\n")
+                    # Split by newlines first
+                    paragraphs = [p.strip() for p in response.split("\n") if p.strip()]
 
-                    for part in parts:
-                        part = part.strip()
-                        if not part:
-                            continue
-
-                        # ENHANCED: Split into chunks while respecting 2000 char limit
-                        # and punctuation where possible.
-                        while part:
-                            if len(part) <= 2000:
-                                chunk = part
-                                part = ""
+                    for paragraph in paragraphs:
+                        # Split paragraph into sentences or smaller chunks
+                        # We want to avoid sending massive blocks of text
+                        # but also avoid sending single words if possible.
+                        
+                        remaining = paragraph
+                        while remaining:
+                            if len(remaining) <= 2000:
+                                chunk = remaining
+                                remaining = ""
                             else:
-                                # Try splitting at a good point
+                                # Try splitting at a good point (sentence end)
                                 split_idx = -1
-                                for punc in ('. ', '! ', '? ', '\n'):
-                                    idx = part.rfind(punc, 0, 2000)
+                                for punc in ('. ', '! ', '? '):
+                                    idx = remaining.rfind(punc, 0, 1900) # Use 1900 to be safe
                                     if idx > split_idx:
-                                        split_idx = idx + 1
+                                        split_idx = idx + 1 # Include the punctuation
                                 
                                 if split_idx == -1:
-                                    split_idx = part.rfind(" ", 0, 2000)
+                                    # Try splitting at a space
+                                    split_idx = remaining.rfind(" ", 0, 1900)
                                 
                                 if split_idx == -1:
+                                    # Hard cut at 2000
                                     split_idx = 2000
                                 
-                                chunk = part[:split_idx].strip()
-                                part = part[split_idx:].strip()
+                                chunk = remaining[:split_idx].strip()
+                                remaining = remaining[split_idx:].strip()
 
                             if chunk:
                                 await channel.send(chunk)
 
                                 # Dynamic delay simulated typing
-                                base_delay = 0.5 + len(chunk) * 0.01
-                                delay = base_delay + random.uniform(-0.2, 0.4)
-                                delay = max(0.5, min(delay, 4.0))
+                                # Roughly 150-250 WPM = 2.5-4 words per second
+                                # Average word is 5 chars. So 12.5-20 chars per second.
+                                # Let's use 15 chars per second average.
+                                base_delay = 0.8 + (len(chunk) / 15.0)
+                                delay = base_delay + random.uniform(-0.3, 0.5)
+                                delay = max(1.0, min(delay, 5.0))
                                 await asyncio.sleep(delay)
 
         except asyncio.CancelledError:

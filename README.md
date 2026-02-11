@@ -102,6 +102,38 @@ ok but have u considered... maybe not doing that
 
 Upload via `/upload` or add individually with `/add_message`.
 
+## Configuration
+
+The bot is configured via environment variables. See [.env.example](file:///home/azumi/Documents/antigravity/faithy/.env.example) for a full list of available options.
+
+### General Settings
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DISCORD_TOKEN` | Your Discord bot token | (Required) |
+| `ADMIN_USER_ID` | Your Discord user ID | (Required) |
+| `ADMIN_ONLY_UPLOAD` | If `True`, only the admin can upload/add messages | `True` |
+| `PERSONA_NAME` | The name of the person being emulated | `faithy` |
+| `ACTIVE_BACKEND` | Text generation backend: `markov`, `ollama`, or `openai` | `markov` |
+
+### LLM Specific Settings
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_TEMPERATURE` | Controls randomness (0.0–2.0) | `1.0` |
+| `LLM_MAX_TOKENS` | Maximum tokens per response | `512` |
+| `LLM_SAMPLE_SIZE` | How many example messages to feed the LLM | `300` |
+| `SYSTEM_PROMPT_TEMPLATE` | Custom prompt for LLM backends | (See `config.py`) |
+
+### Chat Behaviour
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `REPLY_PROBABILITY` | Chance of random unsolicited reply (0.0–1.0) | `0.02` |
+| `DEBOUNCE_DELAY` | Seconds to wait for multi-message bursts | `3.0` |
+| `CONVERSATION_EXPIRY` | Seconds before a thread is considered stale | `300.0` |
+| `MAX_CONTEXT_MESSAGES` | Number of previous messages to include | `20` |
+
 ## Project Structure
 
 ```

@@ -1,5 +1,3 @@
-"""Base class for LLM-based text-generation backends."""
-
 from __future__ import annotations
 
 import random

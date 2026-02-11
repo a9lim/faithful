@@ -1,5 +1,3 @@
-"""Message store — CRUD for the example-message corpus."""
-
 from __future__ import annotations
 
 import logging

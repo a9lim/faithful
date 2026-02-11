@@ -41,31 +41,39 @@ class Admin(commands.Cog):
 
     @app_commands.command(
         name="upload",
-        description="Upload a .txt file of example messages (one per line).",
+        description="Upload a .txt or .json file of example messages.",
     )
-    @app_commands.describe(file="A .txt file with one example message per line")
+    @app_commands.describe(file="A file with example messages")
     @is_admin()
     async def upload(
         self, interaction: discord.Interaction, file: discord.Attachment
     ) -> None:
-        if not file.filename.endswith(".txt"):
+        if not (file.filename.endswith(".txt") or file.filename.endswith(".json")):
             await interaction.response.send_message(
-                "❌ Please upload a `.txt` file.", ephemeral=True
+                "❌ Please upload a `.txt` or `.json` file.", ephemeral=True
             )
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        data = await file.read()
-        lines = data.decode("utf-8", errors="replace").splitlines()
-        count = self.bot.store.add_messages(lines)
+        # Sanitize filename (basic)
+        filename = file.filename.replace("/", "_").replace("\\", "_")
+        target_path = self.bot.config.data_dir / filename
+
+        # Save to disk
+        await file.save(target_path)
+        
+        # Reload store to pick up new file
+        self.bot.store.reload()
+        
+        # Refresh backend with new messages
         await self.bot.refresh_backend()
 
         await interaction.followup.send(
-            f"✅ Added **{count}** messages (total: {self.bot.store.count}).",
+            f"✅ Saved **{filename}** and reloaded. Total messages: {self.bot.store.count}.",
             ephemeral=True,
         )
-        log.info("Admin uploaded %d messages.", count)
+        log.info("Admin uploaded file '%s'.", filename)
 
     # ── /add_message ─────────────────────────────────────
 

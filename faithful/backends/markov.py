@@ -11,7 +11,7 @@ import markovify
 from .base import Backend
 
 if TYPE_CHECKING:
-    from faithy.config import Config
+    from faithful.config import Config
 
 
 class MarkovBackend(Backend):

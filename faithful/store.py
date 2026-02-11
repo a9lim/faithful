@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from faithy.config import Config
+    from faithful.config import Config
 
-log = logging.getLogger("faithy.store")
+log = logging.getLogger("faithful.store")
 
 
 class MessageStore:

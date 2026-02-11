@@ -1,8 +1,6 @@
-"""Entry point — run with `python -m faithy`."""
-
 import logging
 
-from .bot import Faithy
+from .bot import Faithful
 from .config import Config
 
 
@@ -13,7 +11,7 @@ def main() -> None:
     )
 
     config = Config()
-    bot = Faithy(config)
+    bot = Faithful(config)
     bot.run(config.discord_token, log_handler=None)
 
 

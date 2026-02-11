@@ -11,7 +11,7 @@ from .base import Backend
 from .llm import BaseLLMBackend
 
 if TYPE_CHECKING:
-    from faithy.config import Config
+    from faithful.config import Config
 
 
 class OllamaBackend(BaseLLMBackend):

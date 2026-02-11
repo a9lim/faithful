@@ -1,5 +1,3 @@
-"""Main Discord bot class."""
-
 from __future__ import annotations
 
 import logging
@@ -15,10 +13,10 @@ if TYPE_CHECKING:
     from .backends.base import Backend
     from .config import Config
 
-log = logging.getLogger("faithy")
+log = logging.getLogger("faithful")
 
 
-class Faithy(commands.Bot):
+class Faithful(commands.Bot):
     """The persona-emulating Discord bot."""
 
     config: Config
@@ -43,9 +41,9 @@ class Faithy(commands.Bot):
 
     async def setup_hook(self) -> None:
         """Load cogs and sync commands."""
-        await self.load_extension("faithy.cogs.admin")
-        await self.load_extension("faithy.cogs.chat")
-        await self.load_extension("faithy.cogs.scheduler")
+        await self.load_extension("faithful.cogs.admin")
+        await self.load_extension("faithful.cogs.chat")
+        await self.load_extension("faithful.cogs.scheduler")
 
         # Build initial backend model from stored examples
         examples = self.store.list_messages()

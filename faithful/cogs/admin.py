@@ -1,5 +1,3 @@
-"""Admin cog — slash commands for managing example messages and backend."""
-
 from __future__ import annotations
 
 import io
@@ -11,16 +9,16 @@ from discord import app_commands
 from discord.ext import commands
 
 if TYPE_CHECKING:
-    from faithy.bot import Faithy
+    from faithful.bot import Faithful
 
-log = logging.getLogger("faithy.admin")
+log = logging.getLogger("faithful.admin")
 
 
 def is_admin():
     """Decorator that restricts a command to the configured admin user."""
 
     async def predicate(interaction: discord.Interaction) -> bool:
-        bot: Faithy = interaction.client  # type: ignore[assignment]
+        bot: Faithful = interaction.client  # type: ignore[assignment]
         if interaction.user.id != bot.config.admin_user_id:
             await interaction.response.send_message(
                 "⛔ You are not authorised to use this command.", ephemeral=True
@@ -35,7 +33,7 @@ def can_upload():
     """Decorator for commands that respect the ADMIN_ONLY_UPLOAD setting."""
 
     async def predicate(interaction: discord.Interaction) -> bool:
-        bot: Faithy = interaction.client  # type: ignore[assignment]
+        bot: Faithful = interaction.client  # type: ignore[assignment]
         if bot.config.admin_only_upload:
             if interaction.user.id != bot.config.admin_user_id:
                 await interaction.response.send_message(
@@ -50,7 +48,7 @@ def can_upload():
 class Admin(commands.Cog):
     """Admin-only commands for managing the bot."""
 
-    def __init__(self, bot: Faithy) -> None:
+    def __init__(self, bot: Faithful) -> None:
         self.bot = bot
 
     # ── /upload ──────────────────────────────────────────
@@ -290,5 +288,5 @@ class Admin(commands.Cog):
         )
 
 
-async def setup(bot: Faithy) -> None:
+async def setup(bot: Faithful) -> None:
     await bot.add_cog(Admin(bot))

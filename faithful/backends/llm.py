@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .base import Backend
 
 if TYPE_CHECKING:
-    from faithy.config import Config
+    from faithful.config import Config
 
 
 class BaseLLMBackend(Backend):

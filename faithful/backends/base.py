@@ -1,5 +1,3 @@
-"""Abstract base class for text-generation backends."""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,5 +1,3 @@
-"""Markov-chain backend — lightweight, no external API needed."""
-
 from __future__ import annotations
 
 import asyncio

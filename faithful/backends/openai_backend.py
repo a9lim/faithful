@@ -1,5 +1,3 @@
-"""OpenAI-compatible backend — works with any API that speaks the OpenAI chat format."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

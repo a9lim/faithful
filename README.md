@@ -1,20 +1,19 @@
 # Faithy
 
-A Discord bot that reads a corpus of example messages and emulates the author's tone, mannerisms, and typing style. It responds when mentioned, occasionally chimes in on its own, and sends 1–2 unprompted messages per day. 
+A Discord bot that reads a corpus of example messages and emulates the author's tone, mannerisms, and typing style. It responds when mentioned, and can optionally chime in on its own. 
 
 ## Features
 
 - **Persona emulation** — learns from example messages you provide
-- **Multi-file support** — upload and manage multiple `.txt` or `.json` example files
-- **Natural chat flow** — separate message bubbles for newlines, typing-speed delays, and message debouncing
+- **Multi-file support** — upload multiple `.txt` example files
+- **Natural chat flow** — sends multiple separate messages, with typing-speed delays and message debouncing
 - **Swappable backends** — choose between:
   | Backend | Description | Requirements |
   |---------|-------------|-------------|
   | `markov` | Markov-chain text generation | None (default) |
   | `ollama` | Local LLM via [Ollama](https://ollama.com) | Ollama running locally |
   | `openai` | Cloud LLM (OpenAI, Groq, Together, etc.) | API key |
-- **Conversation-aware** — tracks context with correct User/Assistant roles
-- **Spontaneous messaging** — sends 1–2 unprompted messages per day
+- **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
 - **Random replies** — configurable chance of replying to any message
 
 ## Prerequisites
@@ -58,7 +57,7 @@ All commands are slash commands and only usable by the configured admin.
 
 | Command | Description |
 |---------|-------------|
-| `/upload` | Upload a `.txt` or `.json` file of example messages |
+| `/upload` | Upload a `.txt` file of example messages |
 | `/add_message <text>` | Add a single example message |
 | `/list_messages [page]` | View stored messages (paginated) |
 | `/remove_message <index>` | Remove a message by its index |
@@ -97,16 +96,6 @@ Create a `.txt` file with one message per line:
 lol yeah thats what i was thinking
 bruh no way
 ok but have u considered... maybe not doing that
-```
-
-### JSON File (.json)
-You can also upload a JSON array of strings:
-
-```json
-[
-  "im literally gonna lose it 😭",
-  "wait actually that kinda goes hard ngl"
-]
 ```
 
 Upload via `/upload` or add individually with `/add_message`.

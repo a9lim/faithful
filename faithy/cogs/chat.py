@@ -58,109 +58,108 @@ class Chat(commands.Cog):
         If cancelled (because a new message arrived), this coroutine exits silently.
         """
         try:
-            await asyncio.sleep(self.bot.config.debounce_delay)
-        except asyncio.CancelledError:
-            return
-        finally:
-            # Clean up our entry regardless
-            self._pending.pop(channel_id, None)
-
-        # Re-fetch history AFTER the debounce wait so we capture all messages
-        # the user sent during the wait period.
-        try:
-            history_msgs = []
-            async for msg in channel.history(limit=20):
-                history_msgs.append(msg)
-            history_msgs.reverse()
-
-            # Context Slicing: Find the last explicit ping (non-reply mention)
-            start_index = 0
-            for i, msg in enumerate(history_msgs):
-                if self.bot.user in msg.mentions and msg.reference is None:
-                    start_index = i
-            history_msgs = history_msgs[start_index:]
-
-            # The most recent non-bot message is the "prompt"
-            # Find the last user message in history to use as the prompt
-            prompt_msg = None
-            for msg in reversed(history_msgs):
-                if msg.author != self.bot.user and not msg.author.bot:
-                    prompt_msg = msg
-                    break
-
-            if prompt_msg is None:
-                return
-
-            # Build structured context (everything except the prompt message)
-            context_for_backend = []
-            for m in history_msgs:
-                if m.id == prompt_msg.id:
-                    continue
-
-                if m.author == self.bot.user:
-                    context_for_backend.append({
-                        "role": "assistant",
-                        "content": m.content
-                    })
-                else:
-                    context_for_backend.append({
-                        "role": "user",
-                        "content": self._format_msg(m)
-                    })
-
+            # Show the bot is thinking/typing early
             async with channel.typing():
+                await asyncio.sleep(self.bot.config.debounce_delay)
+                
+                # Re-fetch history AFTER the debounce wait
+                limit = self.bot.config.max_context_messages
+                history_msgs = []
+                async for msg in channel.history(limit=limit):
+                    history_msgs.append(msg)
+                history_msgs.reverse()
+
+                # Context Slicing: Find the last explicit ping (non-reply mention)
+                start_index = 0
+                for i, msg in enumerate(history_msgs):
+                    if self.bot.user in msg.mentions and msg.reference is None:
+                        start_index = i
+                history_msgs = history_msgs[start_index:]
+
+                # The most recent non-bot message is the "prompt"
+                prompt_msg = None
+                for msg in reversed(history_msgs):
+                    if msg.author != self.bot.user and not msg.author.bot:
+                        prompt_msg = msg
+                        break
+
+                if prompt_msg is None:
+                    return
+
+                # Build structured context (everything except the prompt message)
+                context_for_backend = []
+                for m in history_msgs:
+                    if m.id == prompt_msg.id:
+                        continue
+
+                    if m.author == self.bot.user:
+                        context_for_backend.append({
+                            "role": "assistant",
+                            "content": m.content
+                        })
+                    else:
+                        context_for_backend.append({
+                            "role": "user",
+                            "content": self._format_msg(m)
+                        })
+
                 response = await self.bot.backend.generate(
                     prompt=prompt_msg.content,
                     examples=self.bot.store.get_all_text(),
                     recent_context=context_for_backend,
                 )
 
-            if response:
-                # Normalize legacy <SPLIT> to newlines (just in case)
-                response = response.replace("<SPLIT>", "\n")
+                if response:
+                    # Normalize legacy <SPLIT> to newlines
+                    response = response.replace("<SPLIT>", "\n")
 
-                # Split by newlines
-                parts = response.split("\n")
+                    # Split by newlines
+                    parts = response.split("\n")
 
-                for part in parts:
-                    part = part.strip()
-                    if not part:
-                        continue
+                    for part in parts:
+                        part = part.strip()
+                        if not part:
+                            continue
 
-                    # Safety Check 1: Enforce Discord's 2000 char limit
-                    chunks = []
-                    while len(part) > 2000:
-                        split_idx = part.rfind(" ", 0, 2000)
-                        if split_idx == -1:
-                            split_idx = 2000
-                        chunks.append(part[:split_idx])
-                        part = part[split_idx:].strip()
-                    chunks.append(part)
+                        # ENHANCED: Split into chunks while respecting 2000 char limit
+                        # and punctuation where possible.
+                        while part:
+                            if len(part) <= 2000:
+                                chunk = part
+                                part = ""
+                            else:
+                                # Try splitting at a good point
+                                split_idx = -1
+                                for punc in ('. ', '! ', '? ', '\n'):
+                                    idx = part.rfind(punc, 0, 2000)
+                                    if idx > split_idx:
+                                        split_idx = idx + 1
+                                
+                                if split_idx == -1:
+                                    split_idx = part.rfind(" ", 0, 2000)
+                                
+                                if split_idx == -1:
+                                    split_idx = 2000
+                                
+                                chunk = part[:split_idx].strip()
+                                part = part[split_idx:].strip()
 
-                    for i, chunk in enumerate(chunks):
-                        # Safety Check 2: Ensure ALL chunks end with sentence terminator
-                        valid_endings = ('.', '!', '?', '~', '"', ')', '*', '>', ']', '}')
-                        if not chunk.endswith(valid_endings):
-                            last_punc = -1
-                            for punc in valid_endings:
-                                idx = chunk.rfind(punc)
-                                if idx > last_punc:
-                                    last_punc = idx
+                            if chunk:
+                                await channel.send(chunk)
 
-                            if last_punc != -1:
-                                chunk = chunk[:last_punc+1]
+                                # Dynamic delay simulated typing
+                                base_delay = 0.5 + len(chunk) * 0.01
+                                delay = base_delay + random.uniform(-0.2, 0.4)
+                                delay = max(0.5, min(delay, 4.0))
+                                await asyncio.sleep(delay)
 
-                        if chunk:
-                            await channel.send(chunk)
-
-                            # Dynamic delay based on message length to simulate typing
-                            base_delay = 0.3 + len(chunk) * 0.02
-                            delay = base_delay + random.uniform(-0.3, 0.5)
-                            delay = max(0.3, min(delay, 3.0))
-                            await asyncio.sleep(delay)
-
+        except asyncio.CancelledError:
+            return
         except Exception:
             log.exception("Failed to generate response")
+        finally:
+            # Clean up our entry regardless
+            self._pending.pop(channel_id, None)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -172,40 +171,33 @@ class Chat(commands.Cog):
         if self.bot.store.count == 0:
             return
 
-        # Quick history fetch to decide whether to respond
-        history_msgs = []
-        async for msg in message.channel.history(limit=20):
-            history_msgs.append(msg)
-        history_msgs.reverse()
-
-        # Context Slicing
-        start_index = 0
-        for i, msg in enumerate(history_msgs):
-            if self.bot.user in msg.mentions and msg.reference is None:
-                start_index = i
-        history_msgs = history_msgs[start_index:]
-
-        # Check conversation status
-        in_conversation = False
-        if len(history_msgs) >= 2:
-            prev_msg = history_msgs[-2]
-            if prev_msg.author == self.bot.user:
-                # Check if it's been too long since our last message
-                from discord.utils import utcnow
-                age = (utcnow() - prev_msg.created_at).total_seconds()
-                if age < self.bot.config.conversation_expiry:
-                    in_conversation = True
-
         # Decide whether to respond
         is_dm = message.guild is None
-        should_respond = is_dm or in_conversation or self._is_mentioned(message) or self._should_reply_randomly()
+        is_mentioned = self._is_mentioned(message)
+        
+        # Optimization: Only fetch history if we weren't mentioned and aren't in a DM
+        # (Since we always respond to those anyway)
+        in_conversation = False
+        if not (is_mentioned or is_dm):
+            # Fetch just enough history to check recent conversation flow
+            history = []
+            async for m in message.channel.history(limit=2):
+                history.append(m)
+            
+            if len(history) >= 2:
+                prev_msg = history[1] # The message before current one
+                if prev_msg.author == self.bot.user:
+                    from discord.utils import utcnow
+                    age = (utcnow() - prev_msg.created_at).total_seconds()
+                    if age < self.bot.config.conversation_expiry:
+                        in_conversation = True
+
+        should_respond = is_dm or is_mentioned or in_conversation or self._should_reply_randomly()
 
         if not should_respond:
             return
 
-        # Debounce: cancel any existing pending response for this channel
-        # and start a new timer. This lets the user send multiple messages
-        # before the bot responds.
+        # Debounce
         channel_id = message.channel.id
         existing = self._pending.get(channel_id)
         if existing and not existing.done():

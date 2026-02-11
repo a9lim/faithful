@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
+import time
 from typing import TYPE_CHECKING
 
 from discord.ext import commands, tasks
@@ -26,6 +28,26 @@ class Scheduler(commands.Cog):
     def __init__(self, bot: Faithy) -> None:
         self.bot = bot
         self._started = False
+        self._state_file = self.bot.config.data_dir / "scheduler_state.json"
+
+    def _load_next_run(self) -> float | None:
+        """Load the next scheduled run time from disk."""
+        if not self._state_file.exists():
+            return None
+        try:
+            with open(self._state_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("next_run")
+        except Exception:
+            return None
+
+    def _save_next_run(self, timestamp: float) -> None:
+        """Save the next scheduled run time to disk."""
+        try:
+            with open(self._state_file, "w", encoding="utf-8") as f:
+                json.dump({"next_run": timestamp}, f)
+        except Exception:
+            log.warning("Failed to save scheduler state.")
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -39,11 +61,25 @@ class Scheduler(commands.Cog):
 
     @tasks.loop(hours=1)  # placeholder interval; we randomise inside
     async def spontaneous_loop(self) -> None:
-        # Wait a random interval (12–24h) before sending
-        delay = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
-        log.info("Next spontaneous message in %.1f hours.", delay / 3600)
+        # 1. Determine wait time
+        next_run = self._load_next_run()
+        now = time.time()
+
+        if next_run and next_run > now:
+            delay = next_run - now
+            log.info("Resuming scheduler: next spontaneous message in %.1f hours.", delay / 3600)
+        else:
+            delay = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
+            self._save_next_run(now + delay)
+            log.info("Next spontaneous message scheduled in %.1f hours.", delay / 3600)
+
+        # 2. Wait
         await asyncio.sleep(delay)
 
+        # 3. Reset state for next iteration (so we generate a new one next time)
+        self._save_next_run(0)
+
+        # 4. Attempt to send
         channels = self.bot.config.spontaneous_channels
         if not channels:
             return
@@ -59,6 +95,7 @@ class Scheduler(commands.Cog):
             return
 
         try:
+            # Spontaneous messages use an empty prompt to trigger personality-based text
             async with channel.typing():  # type: ignore[union-attr]
                 response = await self.bot.backend.generate(
                     prompt="",

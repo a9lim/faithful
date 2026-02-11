@@ -58,6 +58,11 @@ class Faithy(commands.Bot):
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id)
+        
+        # Update presence
+        activity = discord.CustomActivity(name=f"being me")
+        await self.change_presence(activity=activity)
+        
         # Sync slash commands globally
         synced = await self.tree.sync()
         log.info("Synced %d slash commands.", len(synced))

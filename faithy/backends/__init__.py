@@ -1,0 +1,29 @@
+"""Backend factory — returns the active text-generation backend."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from .markov import MarkovBackend
+from .ollama_backend import OllamaBackend
+from .openai_backend import OpenAIBackend
+
+if TYPE_CHECKING:
+    from faithy.config import Config
+    from .base import Backend
+
+_BACKENDS: dict[str, type[Backend]] = {
+    "markov": MarkovBackend,
+    "ollama": OllamaBackend,
+    "openai": OpenAIBackend,
+}
+
+
+def get_backend(name: str, config: "Config") -> "Backend":
+    """Instantiate and return a backend by name."""
+    cls = _BACKENDS.get(name.lower())
+    if cls is None:
+        raise ValueError(
+            f"Unknown backend '{name}'. Choose from: {', '.join(_BACKENDS)}"
+        )
+    return cls(config)

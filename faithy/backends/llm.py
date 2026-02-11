@@ -32,17 +32,10 @@ class BaseLLMBackend(Backend):
         examples: str,
         recent_context: list[dict[str, str]],
     ) -> str:
-        # Dynamic sampling
-        if len(self._all_examples) > self.config.llm_sample_size:
-            selected = random.sample(self._all_examples, self.config.llm_sample_size)
-        else:
-            selected = self._all_examples
-
-        # Build system prompt
-        text_examples = "\n".join(selected)
+        # Use provided examples directly (caller handles sampling)
         system_prompt = self.config.system_prompt_template.format(
             name=self.config.persona_name,
-            examples=text_examples
+            examples=examples
         )
 
         messages: list[dict[str, str]] = [

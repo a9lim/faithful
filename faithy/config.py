@@ -22,6 +22,9 @@ class Config:
     admin_user_id: int = field(
         default_factory=lambda: int(os.environ["ADMIN_USER_ID"])
     )
+    admin_only_upload: bool = field(
+        default_factory=lambda: os.getenv("ADMIN_ONLY_UPLOAD", "True").lower() == "true"
+    )
 
     # Active backend
     active_backend: str = field(
@@ -45,6 +48,14 @@ class Config:
     )
     openai_base_url: str = field(
         default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    )
+
+    # LLM Settings
+    llm_temperature: float = field(
+        default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "1.0"))
+    )
+    llm_max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "512"))
     )
 
     # Behaviour
@@ -114,3 +125,11 @@ class Config:
         if self.max_context_messages < 0:
             log.warning("MAX_CONTEXT_MESSAGES cannot be negative. Resetting to 20.")
             self.max_context_messages = 20
+
+        if not (0 <= self.llm_temperature <= 2.0):
+            log.warning("LLM_TEMPERATURE must be between 0 and 2. Resetting to 0.7.")
+            self.llm_temperature = 0.7
+
+        if self.llm_max_tokens < 1:
+            log.warning("LLM_MAX_TOKENS must be at least 1. Resetting to 512.")
+            self.llm_max_tokens = 512

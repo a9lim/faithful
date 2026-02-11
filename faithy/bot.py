@@ -48,7 +48,7 @@ class Faithy(commands.Bot):
         await self.load_extension("faithy.cogs.scheduler")
 
         # Build initial backend model from stored examples
-        examples = self.store.get_all_text()
+        examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)
             log.info("Backend '%s' initialised with %d examples.",
@@ -66,12 +66,12 @@ class Faithy(commands.Bot):
         """Hot-swap the active text-generation backend."""
         self.backend = get_backend(name, self.config)
         self.config.active_backend = name
-        examples = self.store.get_all_text()
+        examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)
         log.info("Swapped backend to '%s'.", name)
 
     async def refresh_backend(self) -> None:
         """Re-setup the current backend (call after message corpus changes)."""
-        examples = self.store.get_all_text()
+        examples = self.store.list_messages()
         await self.backend.setup(examples)

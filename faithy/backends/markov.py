@@ -21,15 +21,16 @@ class MarkovBackend(Backend):
         super().__init__(config)
         self._model: markovify.Text | None = None
 
-    async def setup(self, examples: str) -> None:
-        if not examples.strip():
+    async def setup(self, examples: list[str]) -> None:
+        if not examples:
             self._model = None
             return
         # Build model in a thread to avoid blocking the event loop
+        text = "\n".join(examples)
         loop = asyncio.get_running_loop()
         self._model = await loop.run_in_executor(
             None,
-            lambda: markovify.NewlineText(examples, well_formed=False, state_size=2),
+            lambda: markovify.NewlineText(text, well_formed=False, state_size=2),
         )
 
     async def generate(

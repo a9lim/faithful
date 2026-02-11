@@ -16,7 +16,7 @@ class Backend(ABC):
         self.config = config
 
     @abstractmethod
-    async def setup(self, examples: str) -> None:
+    async def setup(self, examples: list[str]) -> None:
         """Called when the example corpus changes (or on first load).
 
         Backends should use this to rebuild any internal models or prompts
@@ -28,7 +28,7 @@ class Backend(ABC):
         self,
         prompt: str,
         examples: str,
-        recent_context: list[str],
+        recent_context: list[dict[str, str]],
     ) -> str:
         """Generate a response.
 

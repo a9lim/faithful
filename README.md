@@ -6,13 +6,13 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
 
 - **Persona emulation** — learns from example messages you provide
 - **Multi-file support** — upload multiple `.txt` example files
-- **Natural chat flow** — sends multiple separate messages, with typing-speed delays and message debouncing
+- **Natural chat flow** — sends separate messages with typing-speed delays and intelligent chunking (prioritizes splitting at punctuation)
 - **Swappable backends** — choose between:
   | Backend | Description | Requirements |
   |---------|-------------|-------------|
   | `markov` | Markov-chain text generation | None (default) |
   | `ollama` | Local LLM via [Ollama](https://ollama.com) | Ollama running locally |
-  | `openai` | Cloud LLM (OpenAI, Groq, Together, etc.) | API key |
+  | `openai` | Cloud LLM (OpenAI-compatible) | API key |
 - **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
 - **Random replies** — configurable chance of replying to any message
 
@@ -64,7 +64,8 @@ All commands are slash commands and only usable by the configured admin.
 | `/clear_messages` | Remove all example messages |
 | `/download_messages` | Download all messages as a `.txt` file |
 | `/set_backend <backend>` | Switch backend: `markov`, `ollama`, or `openai` |
-| `/status` | Show current configuration |
+| `/generate_test <prompt>` | Manually trigger a response test |
+| `/status` | Show detailed configuration status |
 
 ## How It Works
 
@@ -74,8 +75,9 @@ The bot responds when mentioned or replied to. To prevent disjointed conversatio
 
 ### Message Processing
 
-- **Debounce:** When you send a message, the bot waits 3 seconds (configurable) for you to finish typing multiple messages before it starts generating a response.
-- **Multi-Message:** The bot splits its responses by newlines and sends them as separate messages with a natural typing delay.
+- **Debounce:** When you send a message, the bot waits for you to finish typing multiple messages (3s default).
+- **Intelligent Chunking:** Responses are split by newlines, but long sentences are split at logical points (., !, ?) to maintain readability within Discord's 2000-char limit.
+- **Natural Delay:** Simulates typing based on the length of each chunk.
 
 ### Spontaneous Messages
 
@@ -109,19 +111,17 @@ faithy/
 ├── .gitignore
 ├── README.md
 └── faithy/                # Main package
-    ├── __init__.py
     ├── __main__.py        # Entry point
     ├── bot.py             # Discord bot class
     ├── config.py          # Configuration loader
     ├── store.py           # Example message storage
     ├── backends/          # Text-generation backends
-    │   ├── __init__.py    # Backend factory
-    │   ├── base.py        # Abstract base class
+    │   ├── base.py        # Abstract base interface
+    │   ├── llm.py         # Shared logic for LLM backends
     │   ├── markov.py      # Markov chain (no API)
     │   ├── ollama_backend.py  # Local LLM via Ollama
     │   └── openai_backend.py  # Cloud LLM (OpenAI-compatible)
     └── cogs/              # Discord command/event modules
-        ├── __init__.py
         ├── admin.py       # Admin slash commands
         ├── chat.py        # Message handling & responses
         └── scheduler.py   # Spontaneous message scheduler

@@ -53,7 +53,7 @@ class Config:
         default_factory=lambda: float(os.getenv("REPLY_PROBABILITY", "0.02"))
     )
     persona_name: str = field(
-        default_factory=lambda: os.getenv("PERSONA_NAME", "Faithy")
+        default_factory=lambda: os.getenv("PERSONA_NAME", "faithy")
     )
 
     # Data directory

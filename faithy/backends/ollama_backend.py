@@ -54,11 +54,6 @@ class OllamaBackend(Backend):
     def _build_system_prompt(self, examples: str) -> str:
         name = self.config.persona_name
         return (
-            f"You are {name}. You must write EXACTLY like {name} — match the tone, "
-            f"vocabulary, slang, punctuation, capitalization, emoji usage, and sentence "
-            f"structure shown in the example messages below. Stay in character at all "
-            f"times. Never mention that you are an AI or a bot. Keep responses concise "
-            f"and natural — typically 1–3 sentences, matching the length of the examples.\n\n"
             f"### Example messages from {name}:\n"
             f"{examples}\n"
         )

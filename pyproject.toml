@@ -1,0 +1,15 @@
+[project]
+name = "faithy"
+version = "1.0.0"
+description = "A Discord chatbot that emulates the tone and typing style of provided example messages."
+requires-python = ">=3.10"
+dependencies = [
+    "discord.py>=2.3",
+    "python-dotenv>=1.0",
+    "markovify>=0.9",
+    "openai>=1.0",
+    "ollama>=0.4",
+]
+
+[project.scripts]
+faithy = "faithy.__main__:main"

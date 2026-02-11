@@ -1,0 +1,1 @@
+# faithy — Discord persona chatbot

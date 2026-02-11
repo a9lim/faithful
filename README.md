@@ -75,7 +75,7 @@ The bot responds when mentioned or replied to. To prevent disjointed conversatio
 
 ### Message Processing
 
-- **Debounce:** When you send a message, the bot waits for you to finish typing multiple messages (3s default).
+- **Debounce:** When you send a message, the bot waits for you to finish typing multiple messages.
 - **Intelligent Chunking:** Responses are split by newlines, but long sentences are split at logical points (., !, ?) to maintain readability within Discord's 2000-char limit.
 - **Natural Delay:** Simulates typing based on the length of each chunk.
 
@@ -85,9 +85,9 @@ If `SPONTANEOUS_CHANNELS` is configured, the bot sends 1–2 unprompted messages
 
 ### Backends
 
-- **Markov** — builds a statistical model from your examples and generates text that mimics patterns. No external API needed. Good for capturing typing quirks, but less coherent in conversation.
-- **Ollama** — sends a system prompt (with your examples) to a locally-running LLM. Great balance of privacy and quality. Requires [Ollama](https://ollama.com) with a model pulled (e.g., `ollama pull llama3`).
-- **OpenAI** — uses any OpenAI-compatible chat API. Best coherence. Set `OPENAI_BASE_URL` to point to alternative providers.
+- **Markov** — builds a statistical model from examples and generates text that mimics patterns. No external API needed but less coherent in conversation.
+- **Ollama** — sends a system prompt with examples to a locally-running LLM. Requires [Ollama](https://ollama.com) with a model pulled (e.g., `ollama pull llama3`).
+- **OpenAI** — uses any OpenAI-compatible chat API. Set `OPENAI_BASE_URL` to point to alternative providers.
 
 ## Example Messages Format
 

@@ -103,9 +103,15 @@ class Chat(commands.Cog):
                             "content": self._format_msg(m)
                         })
 
+                # Get a balanced sample of examples
+                sampled_examples = self.bot.store.get_sampled_messages(
+                    self.bot.config.llm_sample_size
+                )
+                examples_text = "\n".join(sampled_examples)
+
                 response = await self.bot.backend.generate(
                     prompt=prompt_msg.content,
-                    examples=self.bot.store.get_all_text(),
+                    examples=examples_text,
                     recent_context=context_for_backend,
                 )
 

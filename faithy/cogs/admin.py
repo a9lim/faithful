@@ -247,9 +247,15 @@ class Admin(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
+            # Use balanced sampling for the test too
+            sampled_examples = self.bot.store.get_sampled_messages(
+                self.bot.config.llm_sample_size
+            )
+            examples_text = "\n".join(sampled_examples)
+
             response = await self.bot.backend.generate(
                 prompt=prompt,
-                examples=self.bot.store.get_all_text(),
+                examples=examples_text,
                 recent_context=[],  # No context for manual test
             )
             if response:

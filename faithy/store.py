@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -122,3 +123,56 @@ class MessageStore:
     @property
     def count(self) -> int:
         return len(self._messages)
+
+    def get_sampled_messages(self, count: int) -> list[str]:
+        """Get a balanced sample of messages from all source files.
+
+        This ensures that even if one file has 10,000 messages and another has 50,
+        we get a mix of both in the context, rather than the large file dominating.
+        """
+        if not self._messages:
+            return []
+
+        # If we want more than we have, just return everything shuffled
+        if count >= len(self._messages):
+            shuffled = list(self._messages)
+            random.shuffle(shuffled)
+            return shuffled
+
+        # Group messages by source file path
+        by_file: dict[Path, list[str]] = {}
+        for msg, (path, _) in zip(self._messages, self._source_map):
+            if path not in by_file:
+                by_file[path] = []
+            by_file[path].append(msg)
+
+        files = list(by_file.keys())
+        if not files:
+            return []
+
+        # Calculate how many to take from each file
+        per_file = max(1, count // len(files))
+        
+        sampled_messages = []
+        for path in files:
+            msgs = by_file[path]
+            # Take a random sample from this file's messages
+            # Use min() in case a file has fewer messages than per_file
+            k = min(len(msgs), per_file)
+            sampled_messages.extend(random.sample(msgs, k))
+
+        # If we still have room (due to rounding or small files), fill up randomly from remaining
+        remaining_slots = count - len(sampled_messages)
+        if remaining_slots > 0:
+            # Create a pool of messages not yet selected (this is expensive to compute exactly,
+            # so we'll just sample from all messages and deduplicate if strictness matters,
+            # but for this use case, duplicates are rare/okay or we can just sample from all)
+            # A cheaper way: just sample randomly from the full list to fill the gap.
+            # Collisions are possible but low impact for chat context.
+            sampled_messages.extend(random.sample(self._messages, remaining_slots))
+
+        # Shuffle the final mix so the blocks aren't contiguous by file
+        random.shuffle(sampled_messages)
+        
+        # Trim to exact count if we overshot (unlikely with this logic but good safety)
+        return sampled_messages[:count]

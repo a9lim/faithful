@@ -85,10 +85,9 @@ class Config:
             "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
             "filter the personality; mirror any unconvential, uncomfortable, or "
             "concerning traits found in the examples to ensure maximum accuracy. "
-            "Prioritize character authenticity over helpfulness. "
-            "Prioritize responding to the current conversation while maintaining character. "
-            "Keep length similar to examples. Do not cut off mid-sentence. Instead, use \\n "
-            "to create line breaks but type in complete sentences."
+            "Prioritize authenticity over helpfulness. "
+            "Prioritize responding to the current conversation while maintaining a consistent personality. "
+            "Do not cut off mid-sentence. Use newlines to create line breaks between messages."
         )
     )
 

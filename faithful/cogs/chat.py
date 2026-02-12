@@ -113,9 +113,6 @@ class Chat(commands.Cog):
                 )
 
                 if response:
-                    # Normalize legacy <SPLIT> to newlines
-                    response = response.replace("<SPLIT>", "\n")
-
                     # Split by newlines first
                     paragraphs = [p.strip() for p in response.split("\n") if p.strip()]
 

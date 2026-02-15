@@ -161,36 +161,6 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    # ── /remove_last ─────────────────────────────────────
-
-    @app_commands.command(
-        name="remove_last",
-        description="Remove the most recently added message.",
-    )
-    @can_upload()
-    async def remove_last(self, interaction: discord.Interaction) -> None:
-        count = self.bot.store.count
-        if count == 0:
-            await interaction.response.send_message(
-                "📭 No messages stored.", ephemeral=True
-            )
-            return
-
-        try:
-            # Remove the last message (index = count)
-            removed = self.bot.store.remove_message(count)
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Failed to remove message: {e}", ephemeral=True
-            )
-            return
-
-        await self.bot.refresh_backend()
-        await interaction.response.send_message(
-            f"🗑️ Removed last message: _{removed[:80]}_\n(total: {self.bot.store.count})",
-            ephemeral=True,
-        )
-
     # ── /clear_messages ──────────────────────────────────
 
     @app_commands.command(

@@ -113,37 +113,21 @@ class Chat(commands.Cog):
                 )
 
                 if response:
-                    # Split by newlines first
-                    paragraphs = [p.strip() for p in response.split("\n") if p.strip()]
+                    # Use smart chunking
+                    chunks = self._split_into_chunks(response)
 
-                    for paragraph in paragraphs:
-                        # Split paragraph into sentences or smaller chunks
-                        # We want to avoid sending massive blocks of text
-                        # but also avoid sending single words if possible.
-                        
-                        remaining = paragraph
-                        while remaining:
-                            if len(remaining) <= 2000:
-                                chunk = remaining
-                                remaining = ""
-                            else:
-                                # Try splitting at a good point (sentence end)
-                                split_idx = -1
-                                for punc in ('. ', '! ', '? '):
-                                    idx = remaining.rfind(punc, 0, 1900) # Use 1900 to be safe
-                                    if idx > split_idx:
-                                        split_idx = idx + 1 # Include the punctuation
-                                
-                                if split_idx == -1:
-                                    # Try splitting at a space
-                                    split_idx = remaining.rfind(" ", 0, 1900)
-                                
-                                if split_idx == -1:
-                                    # Hard cut at 2000
-                                    split_idx = 2000
-                                
-                                chunk = remaining[:split_idx].strip()
-                                remaining = remaining[split_idx:].strip()
+                    for chunk in chunks:
+                        if chunk:
+                            await channel.send(chunk)
+
+                            # Dynamic delay simulated typing
+                            # Roughly 150-250 WPM = 2.5-4 words per second
+                            # Average word is 5 chars. So 12.5-20 chars per second.
+                            # Let's use 15 chars per second average.
+                            base_delay = 0.8 + (len(chunk) / 15.0)
+                            delay = base_delay + random.uniform(-0.3, 0.5)
+                            delay = max(1.0, min(delay, 5.0))
+                            await asyncio.sleep(delay)
 
                             if chunk:
                                 await channel.send(chunk)
@@ -158,12 +142,62 @@ class Chat(commands.Cog):
                                 await asyncio.sleep(delay)
 
         except asyncio.CancelledError:
+            log.debug("Debounce cancelled for channel %s", channel_id)
             return
         except Exception:
             log.exception("Failed to generate response")
         finally:
-            # Clean up our entry regardless
-            self._pending.pop(channel_id, None)
+            # Only remove if WE are the current task (avoid removing a newer task)
+            if self._pending.get(channel_id) == asyncio.current_task():
+                self._pending.pop(channel_id, None)
+
+    def _split_into_chunks(self, text: str, limit: int = 2000) -> list[str]:
+        """Smartly split text into chunks that fit within the limit."""
+        chunks = []
+        while text:
+            if len(text) <= limit:
+                chunks.append(text)
+                break
+            
+            # Find the best split point
+            # 1. Split by newline to preserve paragraph structure if possible
+            # 2. Split by sentence endings (. ! ?)
+            # 3. Split by space
+            # 4. Hard cut
+            
+            # Look for split point in the *last* 10% of the allowed limit (1800-2000)
+            # or just up to the limit if we can't find a good one.
+            search_end = limit
+            search_start = max(0, limit - 200)
+            
+            # Try newlines first (highest priority for formatting)
+            split_idx = -1
+            newline_idx = text.rfind("\n", search_start, search_end)
+            if newline_idx != -1:
+                split_idx = newline_idx + 1 # Include newline
+            
+            if split_idx == -1:
+                # Try sentence endings
+                for punc in ('. ', '! ', '? '):
+                    idx = text.rfind(punc, search_start, search_end)
+                    if idx > split_idx:
+                        split_idx = idx + 1 # Include punctuation
+            
+            if split_idx == -1:
+                # Try space
+                split_idx = text.rfind(" ", search_start, search_end)
+            
+            if split_idx == -1:
+                # Hard cut
+                split_idx = limit
+                
+            chunk = text[:split_idx].strip()
+            text = text[split_idx:].strip()
+            
+            if chunk:
+                chunks.append(chunk)
+        
+        return chunks
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -179,24 +213,27 @@ class Chat(commands.Cog):
         is_dm = message.guild is None
         is_mentioned = self._is_mentioned(message)
         
-        # Optimization: Only fetch history if we weren't mentioned and aren't in a DM
-        # (Since we always respond to those anyway)
-        in_conversation = False
-        if not (is_mentioned or is_dm):
-            # Fetch just enough history to check recent conversation flow
-            history = []
-            async for m in message.channel.history(limit=2):
-                history.append(m)
-            
-            if len(history) >= 2:
-                prev_msg = history[1] # The message before current one
-                if prev_msg.author == self.bot.user:
-                    from discord.utils import utcnow
-                    age = (utcnow() - prev_msg.created_at).total_seconds()
-                    if age < self.bot.config.conversation_expiry:
-                        in_conversation = True
-
-        should_respond = is_dm or is_mentioned or in_conversation or self._should_reply_randomly()
+        should_respond = is_dm or is_mentioned
+        
+        # Optimization: Only check history/random chance if we aren't ALREADY responding
+        if not should_respond:
+            # Random reply check (cheapest next check)
+            if self._should_reply_randomly():
+                should_respond = True
+            else:
+                # Conversation continuity check (most expensive, do last)
+                # Fetch just enough history to check recent conversation flow
+                history = []
+                async for m in message.channel.history(limit=2):
+                    history.append(m)
+                
+                if len(history) >= 2:
+                    prev_msg = history[1] # The message before current one
+                    if prev_msg.author == self.bot.user:
+                        from discord.utils import utcnow
+                        age = (utcnow() - prev_msg.created_at).total_seconds()
+                        if age < self.bot.config.conversation_expiry:
+                            should_respond = True
 
         if not should_respond:
             return

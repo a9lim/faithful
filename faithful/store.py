@@ -69,11 +69,6 @@ class MessageStore:
 
     def remove_message(self, index: int) -> str:
         """Remove a message by 1-based index (global) from its source file."""
-        # Reload first to ensure our map is up to date with disk
-        # This reduces race conditions, though doesn't eliminate them if multiple
-        # admins are editing simultaneously (which is rare for this bot).
-        self.reload()
-
         real_idx = index - 1
         if not (0 <= real_idx < len(self._messages)):
             raise IndexError("Invalid message index")
@@ -81,27 +76,24 @@ class MessageStore:
         path, file_idx = self._source_map[real_idx]
         removed_text = self._messages[real_idx]
 
+        # Since it's always .txt now
         self._remove_from_txt(path, file_idx)
             
-        # Reload again to reflect the change in memory immediately
         self.reload()
         return removed_text
 
     def _remove_from_txt(self, path: Path, index: int) -> None:
         try:
-            # Read all lines
             with open(path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            
-            # Remove the specific line
+                
             if 0 <= index < len(lines):
                 lines.pop(index)
                 
-            # Write back
             with open(path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
         except Exception:
-            log.error(f"Failed to remove message from {path}", exc_info=True)
+            log.error(f"Failed to remove message from {path}")
 
     def clear_messages(self) -> int:
         """Delete all .txt message files in the data directory."""
@@ -139,7 +131,7 @@ class MessageStore:
         if not self._messages:
             return []
 
-        # If we need more than available, return everything shuffled
+        # If we want more than we have, just return everything shuffled
         if count >= len(self._messages):
             shuffled = list(self._messages)
             random.shuffle(shuffled)
@@ -163,16 +155,22 @@ class MessageStore:
         for path in files:
             msgs = by_file[path]
             # Take a random sample from this file's messages
+            # Use min() in case a file has fewer messages than per_file
             k = min(len(msgs), per_file)
             sampled_messages.extend(random.sample(msgs, k))
 
-        # Fill any remaining slots randomly from the pool of ALL messages
-        # (ignoring duplication for simplicity/speed)
+        # If we still have room (due to rounding or small files), fill up randomly from remaining
         remaining_slots = count - len(sampled_messages)
         if remaining_slots > 0:
+            # Create a pool of messages not yet selected (this is expensive to compute exactly,
+            # so we'll just sample from all messages and deduplicate if strictness matters,
+            # but for this use case, duplicates are rare/okay or we can just sample from all)
+            # A cheaper way: just sample randomly from the full list to fill the gap.
+            # Collisions are possible but low impact for chat context.
             sampled_messages.extend(random.sample(self._messages, remaining_slots))
 
-        # Shuffle the final mix
+        # Shuffle the final mix so the blocks aren't contiguous by file
         random.shuffle(sampled_messages)
         
+        # Trim to exact count if we overshot (unlikely with this logic but good safety)
         return sampled_messages[:count]

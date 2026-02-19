@@ -4,8 +4,7 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
 
 ## Features
 
-- **Persona emulation** — learns from example messages you provide
-- **Multi-file support** — upload multiple `.txt` example files
+- **Message emulation** — learns from example messages you provide
 - **Natural chat flow** — sends separate messages with typing-speed delays and intelligent chunking (prioritizes splitting at punctuation)
 - **Swappable backends** — choose between:
   | Backend | Description | Requirements |
@@ -14,7 +13,7 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
   | `ollama` | Local LLM via [Ollama](https://ollama.com) | Ollama running locally |
   | `openai` | Cloud LLM (OpenAI-compatible) | API key |
 - **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
-- **Random replies** — configurable chance of replying to any message
+- **Random replies** — configurable chance of replying to any message, even when not pinged
 
 ## Prerequisites
 
@@ -104,7 +103,7 @@ Upload via `/upload` or add individually with `/add_message`.
 
 ## Configuration
 
-The bot is configured via environment variables. See [.env.example](file:///home/azumi/Documents/antigravity/faithful/.env.example) for a full list of available options.
+The bot is configured via environment variables. See .env.example for a full list of available options.
 
 ### General Settings
 
@@ -113,7 +112,7 @@ The bot is configured via environment variables. See [.env.example](file:///home
 | `DISCORD_TOKEN` | Your Discord bot token | (Required) |
 | `ADMIN_USER_ID` | Your Discord user ID | (Required) |
 | `ADMIN_ONLY_UPLOAD` | If `True`, only the admin can upload/add messages | `True` |
-| `PERSONA_NAME` | The name of the person being emulated | `faithful` |
+| `PERSONA_NAME` | The name of the chatbot | `faithful` |
 | `ACTIVE_BACKEND` | Text generation backend: `markov`, `ollama`, or `openai` | `markov` |
 
 ### LLM Specific Settings

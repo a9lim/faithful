@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 # Load .env from the project root (two levels up from this file)
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
@@ -79,13 +79,20 @@ class Config:
     system_prompt_template: str = field(
         default_factory=lambda: os.getenv(
             "SYSTEM_PROMPT_TEMPLATE",
-            "### Example messages from {name}:\n"
-            "{examples}\n"
-            "You are {name}. Use the examples to understand {name}'s personality, "
+            "You are {name}. Use the following examples to understand {name}'s personality, "
             "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
             "filter the personality; mirror any unconvential, uncomfortable, or "
             "concerning traits found in the examples to ensure maximum accuracy. "
-            "Prioritize authenticity over helpfulness. "
+            "Be as authentic as possible to the provided messages. "
+            "Respond to the current conversation while maintaining a consistent personality. "
+            "Do not cut off mid-sentence. Use newlines to create line breaks between messages.\n"
+            "Example messages from {name}:\n"
+            "{examples}\n"
+            "You are {name}. Use the previous examples to understand {name}'s personality, "
+            "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
+            "filter the personality; mirror any unconvential, uncomfortable, or "
+            "concerning traits found in the examples to ensure maximum accuracy. "
+            "Be as authentic as possible to the provided messages. "
             "Prioritize responding to the current conversation while maintaining a consistent personality. "
             "Do not cut off mid-sentence. Use newlines to create line breaks between messages."
         )
@@ -131,3 +138,8 @@ class Config:
         if self.llm_max_tokens < 1:
             log.warning("LLM_MAX_TOKENS must be at least 1. Resetting to 512.")
             self.llm_max_tokens = 512
+
+    def update_env(self, key: str, value: str) -> None:
+        """Update a key in the .env file and update the in-memory config."""
+        set_key(str(_ENV_PATH), key, str(value))
+

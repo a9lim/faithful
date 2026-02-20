@@ -287,6 +287,74 @@ class Admin(commands.Cog):
             file=file, ephemeral=True
         )
 
+    # ── /set_probability ─────────────────────────────────────
+
+    @app_commands.command(
+        name="set_probability",
+        description="Set the bot's random reply probability.",
+    )
+    @app_commands.describe(value="A float between 0.0 and 1.0")
+    @is_admin()
+    async def set_probability(self, interaction: discord.Interaction, value: float) -> None:
+        if not (0.0 <= value <= 1.0):
+            await interaction.response.send_message("❌ Value must be between 0.0 and 1.0.", ephemeral=True)
+            return
+            
+        self.bot.config.reply_probability = value
+        self.bot.config.update_env("REPLY_PROBABILITY", str(value))
+        await interaction.response.send_message(f"✅ Reply probability set to {value:.2f}.", ephemeral=True)
+
+    # ── /set_temperature ─────────────────────────────────────
+
+    @app_commands.command(
+        name="set_temperature",
+        description="Set the LLM temperature.",
+    )
+    @app_commands.describe(value="A float between 0.0 and 2.0")
+    @is_admin()
+    async def set_temperature(self, interaction: discord.Interaction, value: float) -> None:
+        if not (0.0 <= value <= 2.0):
+            await interaction.response.send_message("❌ Value must be between 0.0 and 2.0.", ephemeral=True)
+            return
+            
+        self.bot.config.llm_temperature = value
+        self.bot.config.update_env("LLM_TEMPERATURE", str(value))
+        await interaction.response.send_message(f"✅ Temperature set to {value:.2f}.", ephemeral=True)
+
+    # ── /set_debounce ────────────────────────────────────────
+
+    @app_commands.command(
+        name="set_debounce",
+        description="Set the debounce delay for typing.",
+    )
+    @app_commands.describe(value="A float representing seconds")
+    @is_admin()
+    async def set_debounce(self, interaction: discord.Interaction, value: float) -> None:
+        if value < 0.0:
+            await interaction.response.send_message("❌ Value must be positive.", ephemeral=True)
+            return
+            
+        self.bot.config.debounce_delay = value
+        self.bot.config.update_env("DEBOUNCE_DELAY", str(value))
+        await interaction.response.send_message(f"✅ Debounce delay set to {value:.1f}s.", ephemeral=True)
+
+
+@app_commands.context_menu(name="Add to Persona")
+@can_upload()
+async def add_to_persona(interaction: discord.Interaction, message: discord.Message) -> None:
+    bot: Faithful = interaction.client  # type: ignore[assignment]
+    if not message.content.strip():
+        await interaction.response.send_message("❌ This message has no text.", ephemeral=True)
+        return
+        
+    bot.store.add_messages([message.content])
+    await bot.refresh_backend()
+    await interaction.response.send_message(
+        f"✅ Added message to persona (total: {bot.store.count}).", 
+        ephemeral=True
+    )
+
 
 async def setup(bot: Faithful) -> None:
     await bot.add_cog(Admin(bot))
+    bot.tree.add_command(add_to_persona)

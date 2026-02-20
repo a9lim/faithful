@@ -83,11 +83,12 @@ class Chat(commands.Cog):
                 if prompt_msg is None:
                     return
 
-                # Build structured context (everything except the prompt message)
+                # Build structured context (everything strictly BEFORE the prompt message)
                 context_for_backend = []
                 for m in history_msgs:
                     if m.id == prompt_msg.id:
-                        continue
+                        break
+
 
                     if m.author == self.bot.user:
                         context_for_backend.append({
@@ -185,16 +186,17 @@ class Chat(commands.Cog):
         if not (is_mentioned or is_dm):
             # Fetch just enough history to check recent conversation flow
             history = []
-            async for m in message.channel.history(limit=2):
+            async for m in message.channel.history(limit=7):
                 history.append(m)
             
             if len(history) >= 2:
-                prev_msg = history[1] # The message before current one
-                if prev_msg.author == self.bot.user:
-                    from discord.utils import utcnow
-                    age = (utcnow() - prev_msg.created_at).total_seconds()
-                    if age < self.bot.config.conversation_expiry:
-                        in_conversation = True
+                for prev_msg in history[1:]:
+                    if prev_msg.author == self.bot.user:
+                        from discord.utils import utcnow
+                        age = (utcnow() - prev_msg.created_at).total_seconds()
+                        if age < self.bot.config.conversation_expiry:
+                            in_conversation = True
+                        break
 
         should_respond = is_dm or is_mentioned or in_conversation or self._should_reply_randomly()
 

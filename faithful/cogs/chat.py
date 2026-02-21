@@ -80,8 +80,7 @@ class Chat(commands.Cog):
                         prompt_msg = msg
                         break
 
-                if prompt_msg is None:
-                    return
+                prompt_content = prompt_msg.content if prompt_msg else ""
 
                 # Build structured context (everything strictly BEFORE the prompt message)
                 context_for_backend = []
@@ -108,7 +107,7 @@ class Chat(commands.Cog):
                 examples_text = "\n".join(sampled_examples)
 
                 response = await self.bot.backend.generate(
-                    prompt=prompt_msg.content,
+                    prompt=prompt_content,
                     examples=examples_text,
                     recent_context=context_for_backend,
                 )
@@ -147,8 +146,6 @@ class Chat(commands.Cog):
                                 remaining = remaining[split_idx:].strip()
 
                             if chunk:
-                                await channel.send(chunk)
-
                                 # Dynamic delay simulated typing
                                 # Roughly 150-250 WPM = 2.5-4 words per second
                                 # Average word is 5 chars. So 12.5-20 chars per second.
@@ -156,7 +153,16 @@ class Chat(commands.Cog):
                                 base_delay = 0.8 + (len(chunk) / 15.0)
                                 delay = base_delay + random.uniform(-0.3, 0.5)
                                 delay = max(1.0, min(delay, 5.0))
-                                await asyncio.sleep(delay)
+                                
+                                async with channel.typing():
+                                    await asyncio.sleep(delay)
+                                    await channel.send(chunk)
+                else:
+                    if prompt_msg:
+                        try:
+                            await prompt_msg.add_reaction("⚠️")
+                        except discord.DiscordException:
+                            pass
 
         except asyncio.CancelledError:
             return

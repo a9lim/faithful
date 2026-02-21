@@ -35,7 +35,7 @@ class MarkovBackend(Backend):
         self,
         prompt: str,
         examples: str,
-        recent_context: list[str],
+        recent_context: list[dict[str, str]],
     ) -> str:
         if self._model is None:
             return "I don't have any example messages to work with yet."

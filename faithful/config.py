@@ -53,7 +53,7 @@ class Config:
         default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "1.0"))
     )
     llm_max_tokens: int = field(
-        default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "512"))
+        default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "1024"))
     )
 
     # Behaviour
@@ -85,7 +85,7 @@ class Config:
             "concerning traits found in the examples to ensure maximum accuracy. "
             "Be as authentic as possible to the provided messages. "
             "Respond to the current conversation while maintaining a consistent personality. "
-            "Do not cut off mid-sentence. Use newlines to create line breaks between messages.\n"
+            "Do not cut off mid-sentence. You must finish your sentences! Use newlines to create line breaks between messages.\n"
             "Example messages from {name}:\n"
             "{examples}\n"
             "You are {name}. Use the previous examples to understand {name}'s personality, "
@@ -94,7 +94,7 @@ class Config:
             "concerning traits found in the examples to ensure maximum accuracy. "
             "Be as authentic as possible to the provided messages. "
             "Prioritize responding to the current conversation while maintaining a consistent personality. "
-            "Do not cut off mid-sentence. Use newlines to create line breaks between messages."
+            "Do not cut off mid-sentence. You must finish your sentences! Use newlines to create line breaks between messages."
         )
     )
 

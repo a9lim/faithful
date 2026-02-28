@@ -5,200 +5,180 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv, set_key
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+import tomli_w
 
 log = logging.getLogger("faithful.config")
 
-# Load .env from the project root (two levels up from this file)
-_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(_ENV_PATH)
+_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are {name}. Use the following examples to understand {name}'s personality, "
-    "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
-    "filter the personality; mirror any unconvential, uncomfortable, or "
-    "concerning traits found in the examples to ensure maximum accuracy. "
-    "Be as authentic as possible to the provided messages. "
-    "Respond to the current conversation while maintaining a consistent personality. "
-    "Do not cut off mid-sentence. You must finish your sentences! "
-    "Use newlines to create line breaks between messages.\n"
-    "Example messages from {name}:\n"
-    "{examples}\n"
-    "You are {name}. Use the previous examples to understand {name}'s personality, "
-    "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
-    "filter the personality; mirror any unconvential, uncomfortable, or "
-    "concerning traits found in the examples to ensure maximum accuracy. "
-    "Be as authentic as possible to the provided messages. "
-    "Prioritize responding to the current conversation while maintaining a consistent personality. "
-    "Do not cut off mid-sentence. You must finish your sentences! "
-    "Use newlines to create line breaks between messages."
+    "You are {name}. Study the example messages below to learn {name}'s "
+    "exact personality, tone, writing style, and speech patterns. "
+    "Emulate {name} precisely — do not sanitize, filter, or soften "
+    "any aspect of the personality.\n\n"
+    "Example messages from {name}:\n{examples}\n\n"
+    "Respond to the current conversation as {name}. Stay in character. "
+    "Complete your sentences. Use newlines between separate thoughts."
 )
 
-# Maps .env key names to Config field names for update_env()
-_ENV_TO_FIELD: dict[str, str] = {
-    "ACTIVE_BACKEND": "active_backend",
-    "OLLAMA_MODEL": "ollama_model",
-    "OLLAMA_HOST": "ollama_host",
-    "OPENAI_API_KEY": "openai_api_key",
-    "OPENAI_MODEL": "openai_model",
-    "OPENAI_BASE_URL": "openai_base_url",
-    "GEMINI_API_KEY": "gemini_api_key",
-    "GEMINI_MODEL": "gemini_model",
-    "ANTHROPIC_API_KEY": "anthropic_api_key",
-    "ANTHROPIC_MODEL": "anthropic_model",
-    "LLM_TEMPERATURE": "llm_temperature",
-    "LLM_MAX_TOKENS": "llm_max_tokens",
-    "REPLY_PROBABILITY": "reply_probability",
-    "PERSONA_NAME": "persona_name",
-    "DEBOUNCE_DELAY": "debounce_delay",
-    "CONVERSATION_EXPIRY": "conversation_expiry",
-    "LLM_SAMPLE_SIZE": "llm_sample_size",
-    "MAX_CONTEXT_MESSAGES": "max_context_messages",
+# Maps Config field names to (section, key) in the TOML file
+_FIELD_TO_TOML: dict[str, tuple[str, str]] = {
+    "active_backend": ("backend", "active"),
+    "api_key": ("backend", "api_key"),
+    "model": ("backend", "model"),
+    "base_url": ("backend", "base_url"),
+    "host": ("backend", "host"),
+    "temperature": ("llm", "temperature"),
+    "max_tokens": ("llm", "max_tokens"),
+    "sample_size": ("llm", "sample_size"),
+    "reply_probability": ("behavior", "reply_probability"),
+    "debounce_delay": ("behavior", "debounce_delay"),
+    "persona_name": ("behavior", "persona_name"),
+    "max_context_messages": ("behavior", "max_context_messages"),
+    "conversation_expiry": ("behavior", "conversation_expiry"),
 }
 
 
+def _load_toml(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
 def _clamp(value: float, lo: float, hi: float, name: str, default: float) -> float:
-    """Clamp *value* to [lo, hi], warning and returning *default* if out of range."""
     if lo <= value <= hi:
         return value
-    log.warning("%s=%.4g out of range [%.4g, %.4g]. Resetting to %.4g.", name, value, lo, hi, default)
+    log.warning("%s=%.4g out of range [%.4g, %.4g]; using %.4g.", name, value, lo, hi, default)
     return default
 
 
 @dataclass
 class Config:
-    """Bot-wide configuration sourced from environment variables."""
+    """Bot-wide configuration loaded from config.toml with env var overrides for secrets."""
 
     # Discord
-    discord_token: str = field(default_factory=lambda: os.environ["DISCORD_TOKEN"])
-    admin_user_id: int = field(
-        default_factory=lambda: int(os.environ["ADMIN_USER_ID"])
-    )
-    admin_only_upload: bool = field(
-        default_factory=lambda: os.getenv("ADMIN_ONLY_UPLOAD", "True").lower() == "true"
-    )
+    discord_token: str = ""
+    admin_user_id: int = 0
+    admin_only_upload: bool = True
 
-    # Active backend
-    active_backend: str = field(
-        default_factory=lambda: os.getenv("ACTIVE_BACKEND", "markov")
-    )
+    # Backend
+    active_backend: str = "markov"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
+    host: str = ""
 
-    # Ollama
-    ollama_model: str = field(
-        default_factory=lambda: os.getenv("OLLAMA_MODEL", "llama3")
-    )
-    ollama_host: str = field(
-        default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    )
+    # LLM
+    temperature: float = 1.0
+    max_tokens: int = 1024
+    sample_size: int = 300
 
-    # OpenAI-compatible
-    openai_api_key: str = field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY", "")
-    )
-    openai_model: str = field(
-        default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    )
-    openai_base_url: str = field(
-        default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    )
+    # Behavior
+    persona_name: str = "faithful"
+    reply_probability: float = 0.02
+    debounce_delay: float = 3.0
+    conversation_expiry: float = 300.0
+    max_context_messages: int = 20
+    system_prompt: str = ""
 
-    # Gemini
-    gemini_api_key: str = field(
-        default_factory=lambda: os.getenv("GEMINI_API_KEY", "")
-    )
-    gemini_model: str = field(
-        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    )
-
-    # Anthropic
-    anthropic_api_key: str = field(
-        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
-    )
-    anthropic_model: str = field(
-        default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
-    )
-
-    # LLM Settings
-    llm_temperature: float = field(
-        default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "1.0"))
-    )
-    llm_max_tokens: int = field(
-        default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "1024"))
-    )
-
-    # Behaviour
+    # Scheduler
     spontaneous_channels: list[int] = field(default_factory=list)
-    reply_probability: float = field(
-        default_factory=lambda: float(os.getenv("REPLY_PROBABILITY", "0.02"))
-    )
-    persona_name: str = field(
-        default_factory=lambda: os.getenv("PERSONA_NAME", "faithful")
-    )
-    debounce_delay: float = field(
-        default_factory=lambda: float(os.getenv("DEBOUNCE_DELAY", "3.0"))
-    )
-    conversation_expiry: float = field(
-        default_factory=lambda: float(os.getenv("CONVERSATION_EXPIRY", "300.0"))
-    )
-    llm_sample_size: int = field(
-        default_factory=lambda: int(os.getenv("LLM_SAMPLE_SIZE", "300"))
-    )
-    max_context_messages: int = field(
-        default_factory=lambda: int(os.getenv("MAX_CONTEXT_MESSAGES", "20"))
-    )
-    system_prompt_template: str = field(
-        default_factory=lambda: os.getenv("SYSTEM_PROMPT_TEMPLATE", DEFAULT_SYSTEM_PROMPT)
-    )
+    scheduler_min_hours: float = 12.0
+    scheduler_max_hours: float = 24.0
 
-    # Data directory
+    # Paths
     data_dir: Path = field(
         default_factory=lambda: Path(__file__).resolve().parent.parent / "data"
     )
+    _config_path: Path = field(default=_CONFIG_PATH, repr=False)
+
+    @classmethod
+    def from_file(cls, path: Path | None = None) -> Config:
+        """Load configuration from a TOML file. Environment variables
+        override ``discord.token`` (``DISCORD_TOKEN``), ``discord.admin_user_id``
+        (``ADMIN_USER_ID``), and ``backend.api_key`` (``API_KEY``)."""
+        config_path = path or _CONFIG_PATH
+        raw = _load_toml(config_path)
+
+        d = raw.get("discord", {})
+        b = raw.get("backend", {})
+        llm = raw.get("llm", {})
+        beh = raw.get("behavior", {})
+        sch = raw.get("scheduler", {})
+
+        return cls(
+            discord_token=os.environ.get("DISCORD_TOKEN", d.get("token", "")),
+            admin_user_id=int(os.environ.get("ADMIN_USER_ID", d.get("admin_user_id", 0))),
+            admin_only_upload=d.get("admin_only_upload", True),
+
+            active_backend=b.get("active", "markov"),
+            api_key=os.environ.get("API_KEY", b.get("api_key", "")),
+            model=b.get("model", ""),
+            base_url=b.get("base_url", ""),
+            host=b.get("host", ""),
+
+            temperature=float(llm.get("temperature", 1.0)),
+            max_tokens=int(llm.get("max_tokens", 1024)),
+            sample_size=int(llm.get("sample_size", 300)),
+
+            persona_name=beh.get("persona_name", "faithful"),
+            reply_probability=float(beh.get("reply_probability", 0.02)),
+            debounce_delay=float(beh.get("debounce_delay", 3.0)),
+            conversation_expiry=float(beh.get("conversation_expiry", 300.0)),
+            max_context_messages=int(beh.get("max_context_messages", 20)),
+            system_prompt=beh.get("system_prompt", ""),
+
+            spontaneous_channels=sch.get("channels", []),
+            scheduler_min_hours=float(sch.get("min_hours", 12)),
+            scheduler_max_hours=float(sch.get("max_hours", 24)),
+
+            data_dir=Path(__file__).resolve().parent.parent / "data",
+            _config_path=config_path,
+        )
 
     def __post_init__(self) -> None:
-        # Parse spontaneous channels from comma-separated env var
-        raw = os.getenv("SPONTANEOUS_CHANNELS", "")
-        if raw.strip():
-            self.spontaneous_channels = [
-                int(ch.strip()) for ch in raw.split(",") if ch.strip()
-            ]
-
-        # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Validation
-        self.debounce_delay = _clamp(self.debounce_delay, 0, 60, "DEBOUNCE_DELAY", 3.0)
-        self.reply_probability = _clamp(self.reply_probability, 0, 1, "REPLY_PROBABILITY", 0.02)
-        self.llm_temperature = _clamp(self.llm_temperature, 0, 2, "LLM_TEMPERATURE", 1.0)
+        if not self.discord_token:
+            raise ValueError(
+                "Discord token required: set discord.token in config.toml or DISCORD_TOKEN env var"
+            )
+        if not self.admin_user_id:
+            raise ValueError(
+                "Admin user ID required: set discord.admin_user_id in config.toml or ADMIN_USER_ID env var"
+            )
 
-        if self.llm_sample_size < 1:
-            log.warning("LLM_SAMPLE_SIZE must be at least 1. Resetting to 300.")
-            self.llm_sample_size = 300
+        self.debounce_delay = _clamp(self.debounce_delay, 0, 60, "debounce_delay", 3.0)
+        self.reply_probability = _clamp(self.reply_probability, 0, 1, "reply_probability", 0.02)
+        self.temperature = _clamp(self.temperature, 0, 2, "temperature", 1.0)
+        self.sample_size = max(1, self.sample_size)
+        self.max_context_messages = max(0, self.max_context_messages)
+        self.max_tokens = max(1, self.max_tokens)
 
-        if self.max_context_messages < 0:
-            log.warning("MAX_CONTEXT_MESSAGES cannot be negative. Resetting to 20.")
-            self.max_context_messages = 20
+        if not self.system_prompt:
+            self.system_prompt = DEFAULT_SYSTEM_PROMPT
 
-        if self.llm_max_tokens < 1:
-            log.warning("LLM_MAX_TOKENS must be at least 1. Resetting to 1024.")
-            self.llm_max_tokens = 1024
-
-    def update_env(self, key: str, value: str) -> None:
-        """Update a key in the .env file and set the corresponding in-memory field."""
-        set_key(str(_ENV_PATH), key, str(value))
-
-        field_name = _ENV_TO_FIELD.get(key)
-        if field_name is None:
-            return
-
-        current = getattr(self, field_name, None)
-        if current is None:
-            return
-
-        # Cast to the same type as the existing field
+    def save(self, field_name: str, value: object) -> None:
+        """Update a config field in memory and persist to the TOML file."""
+        current = getattr(self, field_name)
         if isinstance(current, float):
-            setattr(self, field_name, float(value))
+            value = float(value)  # type: ignore[arg-type]
         elif isinstance(current, int):
-            setattr(self, field_name, int(value))
-        else:
-            setattr(self, field_name, value)
+            value = int(value)  # type: ignore[arg-type]
+        setattr(self, field_name, value)
+
+        toml_loc = _FIELD_TO_TOML.get(field_name)
+        if toml_loc is None:
+            return
+
+        section, key = toml_loc
+        raw = _load_toml(self._config_path)
+        raw.setdefault(section, {})[key] = value
+        with open(self._config_path, "wb") as f:
+            tomli_w.dump(raw, f)

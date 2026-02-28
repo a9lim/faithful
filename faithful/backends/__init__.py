@@ -20,8 +20,10 @@ _BACKENDS: dict[str, type[Backend]] = {
     "anthropic": AnthropicBackend,
 }
 
+BACKEND_NAMES = list(_BACKENDS.keys())
 
-def get_backend(name: str, config: "Config") -> "Backend":
+
+def get_backend(name: str, config: Config) -> Backend:
     """Instantiate and return a backend by name."""
     cls = _BACKENDS.get(name.lower())
     if cls is None:

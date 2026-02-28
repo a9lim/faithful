@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class MarkovBackend(Backend):
     """Generates text using a Markov-chain model built from the example corpus."""
 
-    def __init__(self, config: "Config") -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__(config)
         self._model: markovify.Text | None = None
 

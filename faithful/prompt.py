@@ -12,6 +12,13 @@ if TYPE_CHECKING:
     from .bot import Faithful
 
 
+def format_system_prompt(
+    template: str, persona_name: str, examples: list[str]
+) -> str:
+    """Format a system prompt template with persona name and examples."""
+    return template.format(name=persona_name, examples="\n".join(examples))
+
+
 def build_context(
     history: list[discord.Message],
     bot_user: discord.User | discord.Member,
@@ -54,7 +61,7 @@ def slice_from_last_mention(
 
 async def build_request(
     channel: discord.abc.Messageable,
-    bot: "Faithful",
+    bot: Faithful,
 ) -> tuple[GenerationRequest, discord.Message | None]:
     """Assemble a GenerationRequest from current channel state.
 
@@ -66,10 +73,8 @@ async def build_request(
         history_msgs.append(msg)
     history_msgs.reverse()
 
-    # Slice from last direct mention
     history_msgs = slice_from_last_mention(history_msgs, bot.user)
 
-    # Find the triggering message
     prompt_msg = find_prompt_message(history_msgs, bot.user)
     prompt_content = prompt_msg.content if prompt_msg else ""
 
@@ -84,15 +89,15 @@ async def build_request(
         context_msgs = history_msgs
 
     context = build_context(context_msgs, bot.user)
+    sampled = bot.store.get_sampled_messages(bot.config.sample_size)
 
-    # Sample examples
-    sampled = bot.store.get_sampled_messages(bot.config.llm_sample_size)
+    system_prompt = format_system_prompt(
+        bot.config.system_prompt, bot.config.persona_name, sampled
+    )
 
     request = GenerationRequest(
         prompt=prompt_content,
-        examples=sampled,
+        system_prompt=system_prompt,
         context=context,
-        persona_name=bot.config.persona_name,
-        system_prompt_template=bot.config.system_prompt_template,
     )
     return request, prompt_msg

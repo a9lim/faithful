@@ -10,7 +10,7 @@ def main() -> None:
         format="%(asctime)s | %(name)-12s | %(levelname)-8s | %(message)s",
     )
 
-    config = Config()
+    config = Config.from_file()
     bot = Faithful(config)
     bot.run(config.discord_token, log_handler=None)
 

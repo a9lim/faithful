@@ -9,26 +9,31 @@ from .llm import BaseLLMBackend
 if TYPE_CHECKING:
     from faithful.config import Config
 
+DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
 
 class OpenAIBackend(BaseLLMBackend):
     """Generates text via the OpenAI Responses API."""
 
-    def __init__(self, config: "Config") -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__(config)
         self._client = AsyncOpenAI(
-            api_key=config.openai_api_key,
-            base_url=config.openai_base_url,
+            api_key=config.api_key,
+            base_url=config.base_url or DEFAULT_BASE_URL,
         )
 
-    async def _call_api(self, system_prompt: str, messages: list[dict[str, str]]) -> str:
+    async def _call_api(
+        self, system_prompt: str, messages: list[dict[str, str]]
+    ) -> str:
         input_messages: list[dict[str, str]] = [
             {"role": "developer", "content": system_prompt},
             *messages,
         ]
         response = await self._client.responses.create(
-            model=self.config.openai_model,
+            model=self.config.model or DEFAULT_MODEL,
             input=input_messages,
-            max_output_tokens=self.config.llm_max_tokens,
-            temperature=self.config.llm_temperature,
+            max_output_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
         )
         return (response.output_text or "").strip()

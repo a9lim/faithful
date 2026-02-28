@@ -1,4 +1,4 @@
-"""Scheduler cog — sends 1-2 unprompted messages per day at random times."""
+"""Scheduler cog — sends unprompted messages at random intervals."""
 
 from __future__ import annotations
 
@@ -13,14 +13,12 @@ from discord.ext import commands
 
 from faithful.backends.base import GenerationRequest
 from faithful.chunker import send_chunked
+from faithful.prompt import format_system_prompt
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
 
 log = logging.getLogger("faithful.scheduler")
-
-MIN_INTERVAL = 12 * 60 * 60  # 12 hours
-MAX_INTERVAL = 24 * 60 * 60  # 24 hours
 
 
 class Scheduler(commands.Cog):
@@ -62,6 +60,9 @@ class Scheduler(commands.Cog):
     async def _loop(self) -> None:
         await self.bot.wait_until_ready()
 
+        min_sec = self.bot.config.scheduler_min_hours * 3600
+        max_sec = self.bot.config.scheduler_max_hours * 3600
+
         while True:
             try:
                 next_run = self._load_next_run()
@@ -71,9 +72,11 @@ class Scheduler(commands.Cog):
                     delay = next_run - now
                     log.info("Next spontaneous message in %.1f hours.", delay / 3600)
                 else:
-                    delay = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
+                    delay = random.uniform(min_sec, max_sec)
                     self._save_next_run(now + delay)
-                    log.info("Scheduled spontaneous message in %.1f hours.", delay / 3600)
+                    log.info(
+                        "Scheduled spontaneous message in %.1f hours.", delay / 3600
+                    )
 
                 await asyncio.sleep(delay)
                 self._save_next_run(0)
@@ -100,12 +103,15 @@ class Scheduler(commands.Cog):
             log.warning("Spontaneous channel %d not found.", channel_id)
             return
 
-        sampled = self.bot.store.get_sampled_messages(self.bot.config.llm_sample_size)
+        cfg = self.bot.config
+        sampled = self.bot.store.get_sampled_messages(cfg.sample_size)
+        system_prompt = format_system_prompt(
+            cfg.system_prompt, cfg.persona_name, sampled
+        )
+
         request = GenerationRequest(
             prompt="",
-            examples=sampled,
-            persona_name=self.bot.config.persona_name,
-            system_prompt_template=self.bot.config.system_prompt_template,
+            system_prompt=system_prompt,
         )
 
         try:

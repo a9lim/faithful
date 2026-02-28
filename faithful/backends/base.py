@@ -13,16 +13,14 @@ class GenerationRequest:
     """Everything a backend needs to produce a response."""
 
     prompt: str
-    examples: list[str]
+    system_prompt: str
     context: list[dict[str, str]] = field(default_factory=list)
-    persona_name: str = "faithful"
-    system_prompt_template: str = ""
 
 
 class Backend(ABC):
     """Interface that every text-generation backend must implement."""
 
-    def __init__(self, config: "Config") -> None:
+    def __init__(self, config: Config) -> None:
         self.config = config
 
     @abstractmethod

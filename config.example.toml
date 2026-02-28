@@ -1,0 +1,41 @@
+# Faithful Discord Bot Configuration
+# Copy this file to config.toml and fill in your values.
+
+[discord]
+token = ""            # Required: your Discord bot token
+admin_user_id = 0     # Required: your Discord user ID
+admin_only_upload = true
+
+[backend]
+# Options: markov, openai, ollama, gemini, anthropic
+active = "markov"
+
+# API key and model for the active LLM backend
+# Not needed for markov; ollama only needs model
+api_key = ""
+model = ""
+
+# Optional provider-specific settings
+# base_url = "https://api.openai.com/v1"   # OpenAI-compatible API endpoint
+# host = "http://localhost:11434"           # Ollama server address
+
+[llm]
+temperature = 1.0     # 0.0 to 2.0
+max_tokens = 1024
+sample_size = 300     # Example messages to include in system prompt
+
+[behavior]
+persona_name = "faithful"
+reply_probability = 0.02      # 0.0 to 1.0
+debounce_delay = 3.0          # Seconds to wait before responding
+conversation_expiry = 300.0   # Seconds before a conversation goes stale
+max_context_messages = 20
+
+# Optional: custom system prompt template
+# Available placeholders: {name}, {examples}
+# system_prompt = "..."
+
+[scheduler]
+channels = []       # Channel IDs for unprompted messages
+min_hours = 12
+max_hours = 24

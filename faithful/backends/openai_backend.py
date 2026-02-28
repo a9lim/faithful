@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
 
-from .base import Backend
-
 from .llm import BaseLLMBackend
 
 if TYPE_CHECKING:
@@ -13,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class OpenAIBackend(BaseLLMBackend):
-    """Generates text via an OpenAI-compatible chat completions API."""
+    """Generates text via the OpenAI Responses API."""
 
     def __init__(self, config: "Config") -> None:
         super().__init__(config)
@@ -22,11 +20,15 @@ class OpenAIBackend(BaseLLMBackend):
             base_url=config.openai_base_url,
         )
 
-    async def _call_api(self, messages: list[dict[str, str]]) -> str:
-        response = await self._client.chat.completions.create(
+    async def _call_api(self, system_prompt: str, messages: list[dict[str, str]]) -> str:
+        input_messages: list[dict[str, str]] = [
+            {"role": "developer", "content": system_prompt},
+            *messages,
+        ]
+        response = await self._client.responses.create(
             model=self.config.openai_model,
-            messages=messages,
-            max_tokens=self.config.llm_max_tokens,
+            input=input_messages,
+            max_output_tokens=self.config.llm_max_tokens,
             temperature=self.config.llm_temperature,
         )
-        return (response.choices[0].message.content or "").strip()
+        return (response.output_text or "").strip()

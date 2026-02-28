@@ -29,7 +29,7 @@ class Faithful(commands.Bot):
         intents.members = True
 
         super().__init__(
-            command_prefix="!",  # unused — we use slash commands
+            command_prefix="!",
             intents=intents,
             status=discord.Status.online,
             activity=discord.Game(name="being myself"),
@@ -40,12 +40,10 @@ class Faithful(commands.Bot):
         self.backend = get_backend(config.active_backend, config)
 
     async def setup_hook(self) -> None:
-        """Load cogs and sync commands."""
         await self.load_extension("faithful.cogs.admin")
         await self.load_extension("faithful.cogs.chat")
         await self.load_extension("faithful.cogs.scheduler")
 
-        # Build initial backend model from stored examples
         examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)
@@ -56,19 +54,14 @@ class Faithful(commands.Bot):
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id)
-        
-        # Update presence
-        activity = discord.CustomActivity(name=f"being me")
+        activity = discord.CustomActivity(name="being me")
         await self.change_presence(activity=activity)
-        
-        # Sync slash commands globally
-        synced = await self.tree.sync()
-        log.info("Synced %d slash commands.", len(synced))
 
     async def swap_backend(self, name: str) -> None:
         """Hot-swap the active text-generation backend."""
         self.backend = get_backend(name, self.config)
         self.config.active_backend = name
+        self.config.update_env("ACTIVE_BACKEND", name)
         examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)

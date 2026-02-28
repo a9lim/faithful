@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import markovify
 
-from .base import Backend
+from .base import Backend, GenerationRequest
 
 if TYPE_CHECKING:
     from faithful.config import Config
@@ -23,7 +23,6 @@ class MarkovBackend(Backend):
         if not examples:
             self._model = None
             return
-        # Build model in a thread to avoid blocking the event loop
         text = "\n".join(examples)
         loop = asyncio.get_running_loop()
         self._model = await loop.run_in_executor(
@@ -31,19 +30,13 @@ class MarkovBackend(Backend):
             lambda: markovify.NewlineText(text, well_formed=False, state_size=2),
         )
 
-    async def generate(
-        self,
-        prompt: str,
-        examples: str,
-        recent_context: list[dict[str, str]],
-    ) -> str:
+    async def generate(self, request: GenerationRequest) -> str:
         if self._model is None:
             return "I don't have any example messages to work with yet."
 
-        # Try to generate a few sentences to form a natural response
         sentences: list[str] = []
         target = random.randint(1, 3)
-        for _ in range(target * 5):  # try up to 5× to get enough
+        for _ in range(target * 5):
             s = self._model.make_sentence(tries=100)
             if s:
                 sentences.append(s)
@@ -51,7 +44,6 @@ class MarkovBackend(Backend):
                 break
 
         if not sentences:
-            # Fallback: make a short sentence
             s = self._model.make_short_sentence(280, tries=100)
             if s:
                 sentences.append(s)

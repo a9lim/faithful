@@ -25,20 +25,18 @@ class MessageStore:
         """Scan data directory and load all .txt messages."""
         self._messages.clear()
         self._source_map.clear()
-        
-        # Ensure directory exists
+
         self._dir.mkdir(parents=True, exist_ok=True)
 
-        # Gather all .txt files
         files = sorted([
-            p for p in self._dir.iterdir() 
+            p for p in self._dir.iterdir()
             if p.is_file() and p.suffix == ".txt"
         ])
 
         for p in files:
             self._load_txt(p)
 
-        log.info(f"Loaded {len(self._messages)} messages from {len(files)} files.")
+        log.info("Loaded %d messages from %d files.", len(self._messages), len(files))
 
     def _load_txt(self, path: Path) -> None:
         try:
@@ -49,21 +47,20 @@ class MessageStore:
                         self._messages.append(line.strip())
                         self._source_map.append((path, i))
         except Exception:
-            log.warning(f"Failed to load text file: {path}")
+            log.exception("Failed to load text file: %s", path)
 
     def add_messages(self, lines: list[str]) -> int:
         """Add messages to the default 'messages.txt' file."""
         target = self._dir / "messages.txt"
-        
+
         cleaned = [ln.strip() for ln in lines if ln.strip()]
         if not cleaned:
             return 0
 
-        # Append to file
         with open(target, "a", encoding="utf-8") as f:
             for line in cleaned:
                 f.write(f"{line}\n")
-            
+
         self.reload()
         return len(cleaned)
 
@@ -72,13 +69,11 @@ class MessageStore:
         real_idx = index - 1
         if not (0 <= real_idx < len(self._messages)):
             raise IndexError("Invalid message index")
-            
+
         path, file_idx = self._source_map[real_idx]
         removed_text = self._messages[real_idx]
 
-        # Since it's always .txt now
         self._remove_from_txt(path, file_idx)
-            
         self.reload()
         return removed_text
 
@@ -86,36 +81,34 @@ class MessageStore:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-                
+
             if 0 <= index < len(lines):
                 lines.pop(index)
-                
+
             with open(path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
         except Exception:
-            log.error(f"Failed to remove message from {path}")
+            log.error("Failed to remove message from %s", path)
 
     def clear_messages(self) -> int:
         """Delete all .txt message files in the data directory."""
         count = len(self._messages)
-        
+
         files = [
-            p for p in self._dir.iterdir() 
+            p for p in self._dir.iterdir()
             if p.is_file() and p.suffix == ".txt"
         ]
-        
+
         for p in files:
             p.unlink()
-            
+
         self.reload()
         return count
 
     def list_messages(self) -> list[str]:
-        """Return a copy of all messages."""
         return list(self._messages)
 
     def get_all_text(self) -> str:
-        """Return the full corpus as a single newline-delimited string."""
         return "\n".join(self._messages)
 
     @property
@@ -125,52 +118,41 @@ class MessageStore:
     def get_sampled_messages(self, count: int) -> list[str]:
         """Get a balanced sample of messages from all source files.
 
-        This ensures that even if one file has 10,000 messages and another has 50,
-        we get a mix of both in the context, rather than the large file dominating.
+        Uses index tracking to avoid duplicates when filling remaining slots.
         """
         if not self._messages:
             return []
 
-        # If we want more than we have, just return everything shuffled
         if count >= len(self._messages):
             shuffled = list(self._messages)
             random.shuffle(shuffled)
             return shuffled
 
-        # Group messages by source file path
-        by_file: dict[Path, list[str]] = {}
-        for msg, (path, _) in zip(self._messages, self._source_map):
-            if path not in by_file:
-                by_file[path] = []
-            by_file[path].append(msg)
+        # Group indices by source file
+        by_file: dict[Path, list[int]] = {}
+        for idx, (path, _) in enumerate(self._source_map):
+            by_file.setdefault(path, []).append(idx)
 
         files = list(by_file.keys())
         if not files:
             return []
 
-        # Calculate how many to take from each file
         per_file = max(1, count // len(files))
-        
-        sampled_messages = []
+
+        selected: set[int] = set()
         for path in files:
-            msgs = by_file[path]
-            # Take a random sample from this file's messages
-            # Use min() in case a file has fewer messages than per_file
-            k = min(len(msgs), per_file)
-            sampled_messages.extend(random.sample(msgs, k))
+            indices = by_file[path]
+            k = min(len(indices), per_file)
+            selected.update(random.sample(indices, k))
 
-        # If we still have room (due to rounding or small files), fill up randomly from remaining
-        remaining_slots = count - len(sampled_messages)
+        # Fill remaining slots from unselected indices
+        remaining_slots = count - len(selected)
         if remaining_slots > 0:
-            # Create a pool of messages not yet selected (this is expensive to compute exactly,
-            # so we'll just sample from all messages and deduplicate if strictness matters,
-            # but for this use case, duplicates are rare/okay or we can just sample from all)
-            # A cheaper way: just sample randomly from the full list to fill the gap.
-            # Collisions are possible but low impact for chat context.
-            sampled_messages.extend(random.sample(self._messages, remaining_slots))
+            unselected = [i for i in range(len(self._messages)) if i not in selected]
+            if unselected:
+                fill = min(len(unselected), remaining_slots)
+                selected.update(random.sample(unselected, fill))
 
-        # Shuffle the final mix so the blocks aren't contiguous by file
-        random.shuffle(sampled_messages)
-        
-        # Trim to exact count if we overshot (unlikely with this logic but good safety)
-        return sampled_messages[:count]
+        result = [self._messages[i] for i in selected]
+        random.shuffle(result)
+        return result[:count]

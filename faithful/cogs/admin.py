@@ -8,6 +8,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from faithful.backends.base import GenerationRequest
+
 if TYPE_CHECKING:
     from faithful.bot import Faithful
 
@@ -21,7 +23,7 @@ def is_admin():
         bot: Faithful = interaction.client  # type: ignore[assignment]
         if interaction.user.id != bot.config.admin_user_id:
             await interaction.response.send_message(
-                "⛔ You are not authorised to use this command.", ephemeral=True
+                "\u26d4 You are not authorised to use this command.", ephemeral=True
             )
             return False
         return True
@@ -37,7 +39,7 @@ def can_upload():
         if bot.config.admin_only_upload:
             if interaction.user.id != bot.config.admin_user_id:
                 await interaction.response.send_message(
-                    "⛔ Only the administrator can perform this action.", ephemeral=True
+                    "\u26d4 Only the administrator can perform this action.", ephemeral=True
                 )
                 return False
         return True
@@ -64,27 +66,21 @@ class Admin(commands.Cog):
     ) -> None:
         if not file.filename.endswith(".txt"):
             await interaction.response.send_message(
-                "❌ Please upload a `.txt` file.", ephemeral=True
+                "\u274c Please upload a `.txt` file.", ephemeral=True
             )
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Sanitize filename (basic)
         filename = file.filename.replace("/", "_").replace("\\", "_")
         target_path = self.bot.config.data_dir / filename
 
-        # Save to disk
         await file.save(target_path)
-        
-        # Reload store to pick up new file
         self.bot.store.reload()
-        
-        # Refresh backend with new messages
         await self.bot.refresh_backend()
 
         await interaction.followup.send(
-            f"✅ Saved **{filename}** and reloaded. Total messages: {self.bot.store.count}.",
+            f"\u2705 Saved **{filename}** and reloaded. Total messages: {self.bot.store.count}.",
             ephemeral=True,
         )
         log.info("Admin uploaded file '%s'.", filename)
@@ -103,7 +99,7 @@ class Admin(commands.Cog):
         self.bot.store.add_messages([text])
         await self.bot.refresh_backend()
         await interaction.response.send_message(
-            f"✅ Added message (total: {self.bot.store.count}).", ephemeral=True
+            f"\u2705 Added message (total: {self.bot.store.count}).", ephemeral=True
         )
 
     # ── /list_messages ───────────────────────────────────
@@ -120,7 +116,7 @@ class Admin(commands.Cog):
         msgs = self.bot.store.list_messages()
         if not msgs:
             await interaction.response.send_message(
-                "📭 No messages stored.", ephemeral=True
+                "\U0001f4ed No messages stored.", ephemeral=True
             )
             return
 
@@ -131,7 +127,7 @@ class Admin(commands.Cog):
         chunk = msgs[start : start + per_page]
 
         lines = [f"`{start + i + 1}.` {m[:80]}" for i, m in enumerate(chunk)]
-        header = f"**Messages** — page {page}/{total_pages} ({len(msgs)} total)\n"
+        header = f"**Messages** \u2014 page {page}/{total_pages} ({len(msgs)} total)\n"
         await interaction.response.send_message(
             header + "\n".join(lines), ephemeral=True
         )
@@ -151,13 +147,13 @@ class Admin(commands.Cog):
             removed = self.bot.store.remove_message(index)
         except IndexError:
             await interaction.response.send_message(
-                "❌ Invalid index.", ephemeral=True
+                "\u274c Invalid index.", ephemeral=True
             )
             return
 
         await self.bot.refresh_backend()
         await interaction.response.send_message(
-            f"🗑️ Removed: _{removed[:80]}_\n(total: {self.bot.store.count})",
+            f"\U0001f5d1\ufe0f Removed: _{removed[:80]}_\n(total: {self.bot.store.count})",
             ephemeral=True,
         )
 
@@ -172,7 +168,7 @@ class Admin(commands.Cog):
         count = self.bot.store.clear_messages()
         await self.bot.refresh_backend()
         await interaction.response.send_message(
-            f"🗑️ Cleared **{count}** messages.", ephemeral=True
+            f"\U0001f5d1\ufe0f Cleared **{count}** messages.", ephemeral=True
         )
 
     # ── /set_backend ─────────────────────────────────────
@@ -181,12 +177,14 @@ class Admin(commands.Cog):
         name="set_backend",
         description="Switch the text-generation backend.",
     )
-    @app_commands.describe(backend="Backend to use: markov, ollama, or openai")
+    @app_commands.describe(backend="Backend to use")
     @app_commands.choices(
         backend=[
             app_commands.Choice(name="Markov chain (no API needed)", value="markov"),
             app_commands.Choice(name="Ollama (local LLM)", value="ollama"),
-            app_commands.Choice(name="OpenAI-compatible (cloud)", value="openai"),
+            app_commands.Choice(name="OpenAI (cloud)", value="openai"),
+            app_commands.Choice(name="Gemini (Google)", value="gemini"),
+            app_commands.Choice(name="Anthropic (Claude)", value="anthropic"),
         ]
     )
     @is_admin()
@@ -200,11 +198,11 @@ class Admin(commands.Cog):
             await self.bot.swap_backend(backend.value)
         except Exception as e:
             await interaction.followup.send(
-                f"❌ Failed to switch backend: {e}", ephemeral=True
+                f"\u274c Failed to switch backend: {e}", ephemeral=True
             )
             return
         await interaction.followup.send(
-            f"✅ Backend switched to **{backend.name}**.", ephemeral=True
+            f"\u2705 Backend switched to **{backend.name}**.", ephemeral=True
         )
 
     # ── /status ──────────────────────────────────────────
@@ -245,26 +243,25 @@ class Admin(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
-            # Use balanced sampling for the test too
-            sampled_examples = self.bot.store.get_sampled_messages(
+            sampled = self.bot.store.get_sampled_messages(
                 self.bot.config.llm_sample_size
             )
-            examples_text = "\n".join(sampled_examples)
-
-            response = await self.bot.backend.generate(
+            request = GenerationRequest(
                 prompt=prompt,
-                examples=examples_text,
-                recent_context=[],  # No context for manual test
+                examples=sampled,
+                persona_name=self.bot.config.persona_name,
+                system_prompt_template=self.bot.config.system_prompt_template,
             )
+            response = await self.bot.backend.generate(request)
             if response:
                 await interaction.followup.send(
                     f"**Prompt:** {prompt}\n**Response:** {response}",
-                    ephemeral=True
+                    ephemeral=True,
                 )
             else:
-                await interaction.followup.send("⚠️ No response generated.", ephemeral=True)
+                await interaction.followup.send("\u26a0\ufe0f No response generated.", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+            await interaction.followup.send(f"\u274c Error: {e}", ephemeral=True)
 
     # ── /download_messages ───────────────────────────────
 
@@ -277,7 +274,7 @@ class Admin(commands.Cog):
         text = self.bot.store.get_all_text()
         if not text:
             await interaction.response.send_message(
-                "📭 No messages stored.", ephemeral=True
+                "\U0001f4ed No messages stored.", ephemeral=True
             )
             return
 
@@ -287,7 +284,7 @@ class Admin(commands.Cog):
             file=file, ephemeral=True
         )
 
-    # ── /set_probability ─────────────────────────────────────
+    # ── /set_probability ─────────────────────────────────
 
     @app_commands.command(
         name="set_probability",
@@ -297,14 +294,12 @@ class Admin(commands.Cog):
     @is_admin()
     async def set_probability(self, interaction: discord.Interaction, value: float) -> None:
         if not (0.0 <= value <= 1.0):
-            await interaction.response.send_message("❌ Value must be between 0.0 and 1.0.", ephemeral=True)
+            await interaction.response.send_message("\u274c Value must be between 0.0 and 1.0.", ephemeral=True)
             return
-            
-        self.bot.config.reply_probability = value
         self.bot.config.update_env("REPLY_PROBABILITY", str(value))
-        await interaction.response.send_message(f"✅ Reply probability set to {value:.2f}.", ephemeral=True)
+        await interaction.response.send_message(f"\u2705 Reply probability set to {value:.2f}.", ephemeral=True)
 
-    # ── /set_temperature ─────────────────────────────────────
+    # ── /set_temperature ─────────────────────────────────
 
     @app_commands.command(
         name="set_temperature",
@@ -314,14 +309,12 @@ class Admin(commands.Cog):
     @is_admin()
     async def set_temperature(self, interaction: discord.Interaction, value: float) -> None:
         if not (0.0 <= value <= 2.0):
-            await interaction.response.send_message("❌ Value must be between 0.0 and 2.0.", ephemeral=True)
+            await interaction.response.send_message("\u274c Value must be between 0.0 and 2.0.", ephemeral=True)
             return
-            
-        self.bot.config.llm_temperature = value
         self.bot.config.update_env("LLM_TEMPERATURE", str(value))
-        await interaction.response.send_message(f"✅ Temperature set to {value:.2f}.", ephemeral=True)
+        await interaction.response.send_message(f"\u2705 Temperature set to {value:.2f}.", ephemeral=True)
 
-    # ── /set_debounce ────────────────────────────────────────
+    # ── /set_debounce ────────────────────────────────────
 
     @app_commands.command(
         name="set_debounce",
@@ -331,12 +324,10 @@ class Admin(commands.Cog):
     @is_admin()
     async def set_debounce(self, interaction: discord.Interaction, value: float) -> None:
         if value < 0.0:
-            await interaction.response.send_message("❌ Value must be positive.", ephemeral=True)
+            await interaction.response.send_message("\u274c Value must be positive.", ephemeral=True)
             return
-            
-        self.bot.config.debounce_delay = value
         self.bot.config.update_env("DEBOUNCE_DELAY", str(value))
-        await interaction.response.send_message(f"✅ Debounce delay set to {value:.1f}s.", ephemeral=True)
+        await interaction.response.send_message(f"\u2705 Debounce delay set to {value:.1f}s.", ephemeral=True)
 
 
 @app_commands.context_menu(name="Add to Persona")
@@ -344,14 +335,14 @@ class Admin(commands.Cog):
 async def add_to_persona(interaction: discord.Interaction, message: discord.Message) -> None:
     bot: Faithful = interaction.client  # type: ignore[assignment]
     if not message.content.strip():
-        await interaction.response.send_message("❌ This message has no text.", ephemeral=True)
+        await interaction.response.send_message("\u274c This message has no text.", ephemeral=True)
         return
-        
+
     bot.store.add_messages([message.content])
     await bot.refresh_backend()
     await interaction.response.send_message(
-        f"✅ Added message to persona (total: {bot.store.count}).", 
-        ephemeral=True
+        f"\u2705 Added message to persona (total: {bot.store.count}).",
+        ephemeral=True,
     )
 
 

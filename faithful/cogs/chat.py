@@ -42,7 +42,9 @@ class Chat(commands.Cog):
                 return age < self.bot.config.conversation_expiry
         return False
 
-    async def _debounced_respond(self, channel: discord.abc.Messageable, channel_id: int) -> None:
+    async def _debounced_respond(
+        self, channel: discord.abc.Messageable, channel_id: int
+    ) -> None:
         try:
             async with channel.typing():
                 await asyncio.sleep(self.bot.config.debounce_delay)

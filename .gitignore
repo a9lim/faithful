@@ -1,4 +1,5 @@
-# Environment
+# Config (contains secrets)
+config.toml
 .env
 
 # Python

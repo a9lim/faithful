@@ -8,7 +8,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from faithful.backends import BACKEND_NAMES
 from faithful.backends.base import GenerationRequest
+from faithful.prompt import format_system_prompt
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
@@ -17,8 +19,6 @@ log = logging.getLogger("faithful.admin")
 
 
 def is_admin():
-    """Decorator that restricts a command to the configured admin user."""
-
     async def predicate(interaction: discord.Interaction) -> bool:
         bot: Faithful = interaction.client  # type: ignore[assignment]
         if interaction.user.id != bot.config.admin_user_id:
@@ -32,14 +32,13 @@ def is_admin():
 
 
 def can_upload():
-    """Decorator for commands that respect the ADMIN_ONLY_UPLOAD setting."""
-
     async def predicate(interaction: discord.Interaction) -> bool:
         bot: Faithful = interaction.client  # type: ignore[assignment]
         if bot.config.admin_only_upload:
             if interaction.user.id != bot.config.admin_user_id:
                 await interaction.response.send_message(
-                    "\u26d4 Only the administrator can perform this action.", ephemeral=True
+                    "\u26d4 Only the administrator can perform this action.",
+                    ephemeral=True,
                 )
                 return False
         return True
@@ -53,7 +52,7 @@ class Admin(commands.Cog):
     def __init__(self, bot: Faithful) -> None:
         self.bot = bot
 
-    # ── /upload ──────────────────────────────────────────
+    # ── Messages ─────────────────────────────────────────
 
     @app_commands.command(
         name="upload",
@@ -80,12 +79,11 @@ class Admin(commands.Cog):
         await self.bot.refresh_backend()
 
         await interaction.followup.send(
-            f"\u2705 Saved **{filename}** and reloaded. Total messages: {self.bot.store.count}.",
+            f"\u2705 Saved **{filename}** and reloaded. "
+            f"Total messages: {self.bot.store.count}.",
             ephemeral=True,
         )
         log.info("Admin uploaded file '%s'.", filename)
-
-    # ── /add_message ─────────────────────────────────────
 
     @app_commands.command(
         name="add_message",
@@ -101,8 +99,6 @@ class Admin(commands.Cog):
         await interaction.response.send_message(
             f"\u2705 Added message (total: {self.bot.store.count}).", ephemeral=True
         )
-
-    # ── /list_messages ───────────────────────────────────
 
     @app_commands.command(
         name="list_messages",
@@ -132,8 +128,6 @@ class Admin(commands.Cog):
             header + "\n".join(lines), ephemeral=True
         )
 
-    # ── /remove_message ──────────────────────────────────
-
     @app_commands.command(
         name="remove_message",
         description="Remove an example message by its index number.",
@@ -153,11 +147,10 @@ class Admin(commands.Cog):
 
         await self.bot.refresh_backend()
         await interaction.response.send_message(
-            f"\U0001f5d1\ufe0f Removed: _{removed[:80]}_\n(total: {self.bot.store.count})",
+            f"\U0001f5d1\ufe0f Removed: _{removed[:80]}_\n"
+            f"(total: {self.bot.store.count})",
             ephemeral=True,
         )
-
-    # ── /clear_messages ──────────────────────────────────
 
     @app_commands.command(
         name="clear_messages",
@@ -171,7 +164,24 @@ class Admin(commands.Cog):
             f"\U0001f5d1\ufe0f Cleared **{count}** messages.", ephemeral=True
         )
 
-    # ── /set_backend ─────────────────────────────────────
+    @app_commands.command(
+        name="download_messages",
+        description="Download all stored example messages as a .txt file.",
+    )
+    @is_admin()
+    async def download_messages(self, interaction: discord.Interaction) -> None:
+        text = self.bot.store.get_all_text()
+        if not text:
+            await interaction.response.send_message(
+                "\U0001f4ed No messages stored.", ephemeral=True
+            )
+            return
+
+        buf = io.BytesIO(text.encode("utf-8"))
+        file = discord.File(buf, filename="example_messages.txt")
+        await interaction.response.send_message(file=file, ephemeral=True)
+
+    # ── Backend & LLM ───────────────────────────────────
 
     @app_commands.command(
         name="set_backend",
@@ -205,7 +215,66 @@ class Admin(commands.Cog):
             f"\u2705 Backend switched to **{backend.name}**.", ephemeral=True
         )
 
-    # ── /status ──────────────────────────────────────────
+    @app_commands.command(
+        name="set_temperature",
+        description="Set the LLM temperature.",
+    )
+    @app_commands.describe(value="A float between 0.0 and 2.0")
+    @is_admin()
+    async def set_temperature(
+        self, interaction: discord.Interaction, value: float
+    ) -> None:
+        if not (0.0 <= value <= 2.0):
+            await interaction.response.send_message(
+                "\u274c Value must be between 0.0 and 2.0.", ephemeral=True
+            )
+            return
+        self.bot.config.save("temperature", value)
+        await interaction.response.send_message(
+            f"\u2705 Temperature set to {value:.2f}.", ephemeral=True
+        )
+
+    # ── Behavior ─────────────────────────────────────────
+
+    @app_commands.command(
+        name="set_probability",
+        description="Set the bot's random reply probability.",
+    )
+    @app_commands.describe(value="A float between 0.0 and 1.0")
+    @is_admin()
+    async def set_probability(
+        self, interaction: discord.Interaction, value: float
+    ) -> None:
+        if not (0.0 <= value <= 1.0):
+            await interaction.response.send_message(
+                "\u274c Value must be between 0.0 and 1.0.", ephemeral=True
+            )
+            return
+        self.bot.config.save("reply_probability", value)
+        await interaction.response.send_message(
+            f"\u2705 Reply probability set to {value:.2f}.", ephemeral=True
+        )
+
+    @app_commands.command(
+        name="set_debounce",
+        description="Set the debounce delay for typing.",
+    )
+    @app_commands.describe(value="A float representing seconds")
+    @is_admin()
+    async def set_debounce(
+        self, interaction: discord.Interaction, value: float
+    ) -> None:
+        if value < 0.0:
+            await interaction.response.send_message(
+                "\u274c Value must be positive.", ephemeral=True
+            )
+            return
+        self.bot.config.save("debounce_delay", value)
+        await interaction.response.send_message(
+            f"\u2705 Debounce delay set to {value:.1f}s.", ephemeral=True
+        )
+
+    # ── Status & Testing ────────────────────────────────
 
     @app_commands.command(
         name="status",
@@ -216,21 +285,20 @@ class Admin(commands.Cog):
         cfg = self.bot.config
         lines = [
             f"**Backend:** `{cfg.active_backend}`",
+            f"**Model:** `{cfg.model or '(default)'}`",
             f"**Messages:** {self.bot.store.count}",
             f"**Persona:** {cfg.persona_name}",
             f"**Reply probability:** {cfg.reply_probability:.1%}",
             f"**Debounce delay:** {cfg.debounce_delay}s",
             f"**Context limit:** {cfg.max_context_messages}",
-            f"**Sample size:** {cfg.llm_sample_size}",
-            f"**LLM Temp:** {cfg.llm_temperature}",
-            f"**LLM Max Tokens:** {cfg.llm_max_tokens}",
+            f"**Sample size:** {cfg.sample_size}",
+            f"**Temperature:** {cfg.temperature}",
+            f"**Max tokens:** {cfg.max_tokens}",
             f"**Spontaneous channels:** {len(cfg.spontaneous_channels)}",
         ]
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True
         )
-
-    # ── /generate_test ───────────────────────────────────
 
     @app_commands.command(
         name="generate_test",
@@ -243,14 +311,15 @@ class Admin(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
-            sampled = self.bot.store.get_sampled_messages(
-                self.bot.config.llm_sample_size
+            sampled = self.bot.store.get_sampled_messages(self.bot.config.sample_size)
+            system_prompt = format_system_prompt(
+                self.bot.config.system_prompt,
+                self.bot.config.persona_name,
+                sampled,
             )
             request = GenerationRequest(
                 prompt=prompt,
-                examples=sampled,
-                persona_name=self.bot.config.persona_name,
-                system_prompt_template=self.bot.config.system_prompt_template,
+                system_prompt=system_prompt,
             )
             response = await self.bot.backend.generate(request)
             if response:
@@ -259,83 +328,23 @@ class Admin(commands.Cog):
                     ephemeral=True,
                 )
             else:
-                await interaction.followup.send("\u26a0\ufe0f No response generated.", ephemeral=True)
+                await interaction.followup.send(
+                    "\u26a0\ufe0f No response generated.", ephemeral=True
+                )
         except Exception as e:
             await interaction.followup.send(f"\u274c Error: {e}", ephemeral=True)
-
-    # ── /download_messages ───────────────────────────────
-
-    @app_commands.command(
-        name="download_messages",
-        description="Download all stored example messages as a .txt file.",
-    )
-    @is_admin()
-    async def download_messages(self, interaction: discord.Interaction) -> None:
-        text = self.bot.store.get_all_text()
-        if not text:
-            await interaction.response.send_message(
-                "\U0001f4ed No messages stored.", ephemeral=True
-            )
-            return
-
-        buf = io.BytesIO(text.encode("utf-8"))
-        file = discord.File(buf, filename="example_messages.txt")
-        await interaction.response.send_message(
-            file=file, ephemeral=True
-        )
-
-    # ── /set_probability ─────────────────────────────────
-
-    @app_commands.command(
-        name="set_probability",
-        description="Set the bot's random reply probability.",
-    )
-    @app_commands.describe(value="A float between 0.0 and 1.0")
-    @is_admin()
-    async def set_probability(self, interaction: discord.Interaction, value: float) -> None:
-        if not (0.0 <= value <= 1.0):
-            await interaction.response.send_message("\u274c Value must be between 0.0 and 1.0.", ephemeral=True)
-            return
-        self.bot.config.update_env("REPLY_PROBABILITY", str(value))
-        await interaction.response.send_message(f"\u2705 Reply probability set to {value:.2f}.", ephemeral=True)
-
-    # ── /set_temperature ─────────────────────────────────
-
-    @app_commands.command(
-        name="set_temperature",
-        description="Set the LLM temperature.",
-    )
-    @app_commands.describe(value="A float between 0.0 and 2.0")
-    @is_admin()
-    async def set_temperature(self, interaction: discord.Interaction, value: float) -> None:
-        if not (0.0 <= value <= 2.0):
-            await interaction.response.send_message("\u274c Value must be between 0.0 and 2.0.", ephemeral=True)
-            return
-        self.bot.config.update_env("LLM_TEMPERATURE", str(value))
-        await interaction.response.send_message(f"\u2705 Temperature set to {value:.2f}.", ephemeral=True)
-
-    # ── /set_debounce ────────────────────────────────────
-
-    @app_commands.command(
-        name="set_debounce",
-        description="Set the debounce delay for typing.",
-    )
-    @app_commands.describe(value="A float representing seconds")
-    @is_admin()
-    async def set_debounce(self, interaction: discord.Interaction, value: float) -> None:
-        if value < 0.0:
-            await interaction.response.send_message("\u274c Value must be positive.", ephemeral=True)
-            return
-        self.bot.config.update_env("DEBOUNCE_DELAY", str(value))
-        await interaction.response.send_message(f"\u2705 Debounce delay set to {value:.1f}s.", ephemeral=True)
 
 
 @app_commands.context_menu(name="Add to Persona")
 @can_upload()
-async def add_to_persona(interaction: discord.Interaction, message: discord.Message) -> None:
+async def add_to_persona(
+    interaction: discord.Interaction, message: discord.Message
+) -> None:
     bot: Faithful = interaction.client  # type: ignore[assignment]
     if not message.content.strip():
-        await interaction.response.send_message("\u274c This message has no text.", ephemeral=True)
+        await interaction.response.send_message(
+            "\u274c This message has no text.", ephemeral=True
+        )
         return
 
     bot.store.add_messages([message.content])

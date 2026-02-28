@@ -47,8 +47,11 @@ class Faithful(commands.Bot):
         examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)
-            log.info("Backend '%s' initialised with %d examples.",
-                     self.config.active_backend, self.store.count)
+            log.info(
+                "Backend '%s' initialised with %d examples.",
+                self.config.active_backend,
+                self.store.count,
+            )
         else:
             log.warning("No example messages found. Use /upload to add some.")
 
@@ -60,8 +63,7 @@ class Faithful(commands.Bot):
     async def swap_backend(self, name: str) -> None:
         """Hot-swap the active text-generation backend."""
         self.backend = get_backend(name, self.config)
-        self.config.active_backend = name
-        self.config.update_env("ACTIVE_BACKEND", name)
+        self.config.save("active_backend", name)
         examples = self.store.list_messages()
         if examples:
             await self.backend.setup(examples)

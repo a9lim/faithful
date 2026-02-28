@@ -40,11 +40,13 @@ pip install -e .
 
 ### 2. Configure
 
-Copy the example environment file and fill in your values:
+Copy the example config and fill in your values:
 
 ```bash
-cp .env.example .env
+cp config.example.toml config.toml
 ```
+
+At minimum, set `token` and `admin_user_id` under `[discord]`. To use an LLM backend, set `active`, `api_key`, and `model` under `[backend]`.
 
 ### 3. Run
 
@@ -87,15 +89,15 @@ The bot responds when mentioned or replied to. To prevent disjointed conversatio
 
 ### Spontaneous Messages
 
-If `SPONTANEOUS_CHANNELS` is configured, the bot sends 1–2 unprompted messages per day at random intervals into one of those channels.
+If `channels` is configured under `[scheduler]`, the bot sends 1–2 unprompted messages per day at random intervals into one of those channels.
 
 ### Backends
 
 - **Markov** — builds a statistical model from examples and generates text that mimics patterns. No external API needed but less coherent in conversation.
 - **Ollama** — sends a system prompt with examples to a locally-running LLM. Requires [Ollama](https://ollama.com) with a model pulled (e.g., `ollama pull llama3`).
-- **OpenAI** — uses the OpenAI Responses API. Set `OPENAI_BASE_URL` to point to alternative providers.
-- **Gemini** — uses the Google Gemini API via the `google-genai` SDK. Requires a `GEMINI_API_KEY`.
-- **Anthropic** — uses the Anthropic Messages API. Requires an `ANTHROPIC_API_KEY`. Handles message role alternation automatically.
+- **OpenAI** — uses the OpenAI Responses API. Set `base_url` under `[backend]` to point to alternative providers.
+- **Gemini** — uses the Google Gemini API via the `google-genai` SDK.
+- **Anthropic** — uses the Anthropic Messages API. Handles message role alternation automatically.
 
 ## Example Messages Format
 
@@ -112,77 +114,80 @@ Upload via `/upload` or add individually with `/add_message`.
 
 ## Configuration
 
-The bot is configured via environment variables. See .env.example for a full list of available options.
+The bot is configured via `config.toml`. See `config.example.toml` for a full reference. Environment variables `DISCORD_TOKEN`, `ADMIN_USER_ID`, and `API_KEY` can override their TOML equivalents.
 
-### General Settings
+### `[discord]`
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DISCORD_TOKEN` | Your Discord bot token | (Required) |
-| `ADMIN_USER_ID` | Your Discord user ID | (Required) |
-| `ADMIN_ONLY_UPLOAD` | If `True`, only the admin can upload/add messages | `True` |
-| `PERSONA_NAME` | The name of the chatbot | `faithful` |
-| `ACTIVE_BACKEND` | Text generation backend: `markov`, `ollama`, `openai`, `gemini`, or `anthropic` | `markov` |
+| Key | Description | Default |
+|-----|-------------|---------|
+| `token` | Your Discord bot token | (Required) |
+| `admin_user_id` | Your Discord user ID | (Required) |
+| `admin_only_upload` | Only the admin can upload/add messages | `true` |
 
-### Backend-Specific Settings
+### `[backend]`
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OLLAMA_MODEL` | Ollama model name | `llama3` |
-| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-| `OPENAI_API_KEY` | OpenAI API key | |
-| `OPENAI_MODEL` | OpenAI model name | `gpt-4o-mini` |
-| `OPENAI_BASE_URL` | OpenAI-compatible API base URL | `https://api.openai.com/v1` |
-| `GEMINI_API_KEY` | Google Gemini API key | |
-| `GEMINI_MODEL` | Gemini model name | `gemini-2.0-flash` |
-| `ANTHROPIC_API_KEY` | Anthropic API key | |
-| `ANTHROPIC_MODEL` | Anthropic model name | `claude-sonnet-4-20250514` |
+| Key | Description | Default |
+|-----|-------------|---------|
+| `active` | Backend to use: `markov`, `ollama`, `openai`, `gemini`, `anthropic` | `markov` |
+| `api_key` | API key for the active LLM backend | |
+| `model` | Model name for the active LLM backend | (per-backend default) |
+| `base_url` | Custom base URL for OpenAI-compatible APIs | |
+| `host` | Ollama server address | `http://localhost:11434` |
 
-### LLM Settings
+### `[llm]`
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_TEMPERATURE` | Controls randomness (0.0–2.0) | `1.0` |
-| `LLM_MAX_TOKENS` | Maximum tokens per response | `1024` |
-| `LLM_SAMPLE_SIZE` | How many example messages to feed the LLM | `300` |
-| `SYSTEM_PROMPT_TEMPLATE` | Custom prompt for LLM backends | (See `config.py`) |
+| Key | Description | Default |
+|-----|-------------|---------|
+| `temperature` | Controls randomness (0.0–2.0) | `1.0` |
+| `max_tokens` | Maximum tokens per response | `1024` |
+| `sample_size` | Example messages to include in the system prompt | `300` |
 
-### Chat Behaviour
+### `[behavior]`
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `REPLY_PROBABILITY` | Chance of random unsolicited reply (0.0–1.0) | `0.02` |
-| `DEBOUNCE_DELAY` | Seconds to wait for multi-message bursts | `3.0` |
-| `CONVERSATION_EXPIRY` | Seconds before a thread is considered stale | `300.0` |
-| `MAX_CONTEXT_MESSAGES` | Number of previous messages to include | `20` |
+| Key | Description | Default |
+|-----|-------------|---------|
+| `persona_name` | The persona name used in system prompts | `faithful` |
+| `reply_probability` | Chance of random unsolicited reply (0.0–1.0) | `0.02` |
+| `debounce_delay` | Seconds to wait for multi-message bursts | `3.0` |
+| `conversation_expiry` | Seconds before a thread is considered stale | `300.0` |
+| `max_context_messages` | Number of previous messages to include | `20` |
+| `system_prompt` | Custom system prompt template (`{name}`, `{examples}` placeholders) | (built-in) |
+
+### `[scheduler]`
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `channels` | Channel IDs for unprompted messages | `[]` |
+| `min_hours` | Minimum hours between spontaneous messages | `12` |
+| `max_hours` | Maximum hours between spontaneous messages | `24` |
 
 ## Project Structure
 
 ```
 faithful/
-├── pyproject.toml            # Dependencies and project metadata
-├── .env.example              # Environment variable template
+├── pyproject.toml              # Dependencies and project metadata
+├── config.example.toml         # Configuration template
 ├── .gitignore
 ├── README.md
-└── faithful/                 # Main package
-    ├── __main__.py           # Entry point
-    ├── bot.py                # Discord bot class
-    ├── config.py             # Configuration loader
-    ├── store.py              # Example message storage
-    ├── prompt.py             # Prompt assembly from channel state
-    ├── chunker.py            # Message chunking and typing delays
-    ├── backends/             # Text-generation backends
-    │   ├── base.py           # GenerationRequest + abstract Backend
-    │   ├── llm.py            # Shared logic for LLM backends
-    │   ├── markov.py         # Markov chain (no API)
-    │   ├── ollama_backend.py # Local LLM via Ollama
-    │   ├── openai_backend.py # OpenAI Responses API
-    │   ├── gemini_backend.py # Google Gemini
+└── faithful/                   # Main package
+    ├── __main__.py             # Entry point
+    ├── bot.py                  # Discord bot class
+    ├── config.py               # TOML configuration loader
+    ├── store.py                # Example message storage
+    ├── prompt.py               # Prompt assembly and system prompt formatting
+    ├── chunker.py              # Message chunking and typing delays
+    ├── backends/               # Text-generation backends
+    │   ├── base.py             # GenerationRequest + abstract Backend
+    │   ├── llm.py              # Shared logic for LLM backends
+    │   ├── markov.py           # Markov chain (no API)
+    │   ├── ollama_backend.py   # Local LLM via Ollama
+    │   ├── openai_backend.py   # OpenAI Responses API
+    │   ├── gemini_backend.py   # Google Gemini
     │   └── anthropic_backend.py # Anthropic Claude
-    └── cogs/                 # Discord command/event modules
-        ├── admin.py          # Admin slash commands
-        ├── chat.py           # Message handling & responses
-        └── scheduler.py      # Spontaneous message scheduler
+    └── cogs/                   # Discord command/event modules
+        ├── admin.py            # Admin slash commands
+        ├── chat.py             # Message handling & responses
+        └── scheduler.py        # Spontaneous message scheduler
 ```
 
 ## License

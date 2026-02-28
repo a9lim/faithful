@@ -1,14 +1,68 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
 
+log = logging.getLogger("faithful.config")
+
 # Load .env from the project root (two levels up from this file)
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_ENV_PATH)
+
+DEFAULT_SYSTEM_PROMPT = (
+    "You are {name}. Use the following examples to understand {name}'s personality, "
+    "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
+    "filter the personality; mirror any unconvential, uncomfortable, or "
+    "concerning traits found in the examples to ensure maximum accuracy. "
+    "Be as authentic as possible to the provided messages. "
+    "Respond to the current conversation while maintaining a consistent personality. "
+    "Do not cut off mid-sentence. You must finish your sentences! "
+    "Use newlines to create line breaks between messages.\n"
+    "Example messages from {name}:\n"
+    "{examples}\n"
+    "You are {name}. Use the previous examples to understand {name}'s personality, "
+    "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
+    "filter the personality; mirror any unconvential, uncomfortable, or "
+    "concerning traits found in the examples to ensure maximum accuracy. "
+    "Be as authentic as possible to the provided messages. "
+    "Prioritize responding to the current conversation while maintaining a consistent personality. "
+    "Do not cut off mid-sentence. You must finish your sentences! "
+    "Use newlines to create line breaks between messages."
+)
+
+# Maps .env key names to Config field names for update_env()
+_ENV_TO_FIELD: dict[str, str] = {
+    "ACTIVE_BACKEND": "active_backend",
+    "OLLAMA_MODEL": "ollama_model",
+    "OLLAMA_HOST": "ollama_host",
+    "OPENAI_API_KEY": "openai_api_key",
+    "OPENAI_MODEL": "openai_model",
+    "OPENAI_BASE_URL": "openai_base_url",
+    "GEMINI_API_KEY": "gemini_api_key",
+    "GEMINI_MODEL": "gemini_model",
+    "ANTHROPIC_API_KEY": "anthropic_api_key",
+    "ANTHROPIC_MODEL": "anthropic_model",
+    "LLM_TEMPERATURE": "llm_temperature",
+    "LLM_MAX_TOKENS": "llm_max_tokens",
+    "REPLY_PROBABILITY": "reply_probability",
+    "PERSONA_NAME": "persona_name",
+    "DEBOUNCE_DELAY": "debounce_delay",
+    "CONVERSATION_EXPIRY": "conversation_expiry",
+    "LLM_SAMPLE_SIZE": "llm_sample_size",
+    "MAX_CONTEXT_MESSAGES": "max_context_messages",
+}
+
+
+def _clamp(value: float, lo: float, hi: float, name: str, default: float) -> float:
+    """Clamp *value* to [lo, hi], warning and returning *default* if out of range."""
+    if lo <= value <= hi:
+        return value
+    log.warning("%s=%.4g out of range [%.4g, %.4g]. Resetting to %.4g.", name, value, lo, hi, default)
+    return default
 
 
 @dataclass
@@ -48,6 +102,22 @@ class Config:
         default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     )
 
+    # Gemini
+    gemini_api_key: str = field(
+        default_factory=lambda: os.getenv("GEMINI_API_KEY", "")
+    )
+    gemini_model: str = field(
+        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    )
+
+    # Anthropic
+    anthropic_api_key: str = field(
+        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
+    )
+    anthropic_model: str = field(
+        default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    )
+
     # LLM Settings
     llm_temperature: float = field(
         default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "1.0"))
@@ -77,25 +147,7 @@ class Config:
         default_factory=lambda: int(os.getenv("MAX_CONTEXT_MESSAGES", "20"))
     )
     system_prompt_template: str = field(
-        default_factory=lambda: os.getenv(
-            "SYSTEM_PROMPT_TEMPLATE",
-            "You are {name}. Use the following examples to understand {name}'s personality, "
-            "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
-            "filter the personality; mirror any unconvential, uncomfortable, or "
-            "concerning traits found in the examples to ensure maximum accuracy. "
-            "Be as authentic as possible to the provided messages. "
-            "Respond to the current conversation while maintaining a consistent personality. "
-            "Do not cut off mid-sentence. You must finish your sentences! Use newlines to create line breaks between messages.\n"
-            "Example messages from {name}:\n"
-            "{examples}\n"
-            "You are {name}. Use the previous examples to understand {name}'s personality, "
-            "tone, and style. Write EXACTLY like {name}. Do not sanitize or "
-            "filter the personality; mirror any unconvential, uncomfortable, or "
-            "concerning traits found in the examples to ensure maximum accuracy. "
-            "Be as authentic as possible to the provided messages. "
-            "Prioritize responding to the current conversation while maintaining a consistent personality. "
-            "Do not cut off mid-sentence. You must finish your sentences! Use newlines to create line breaks between messages."
-        )
+        default_factory=lambda: os.getenv("SYSTEM_PROMPT_TEMPLATE", DEFAULT_SYSTEM_PROMPT)
     )
 
     # Data directory
@@ -114,15 +166,11 @@ class Config:
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Basic Validation
-        if self.debounce_delay < 0:
-            log.warning("DEBOUNCE_DELAY is negative. Resetting to 3.0.")
-            self.debounce_delay = 3.0
-        
-        if not (0 <= self.reply_probability <= 1):
-            log.warning("REPLY_PROBABILITY must be between 0 and 1. Clamping.")
-            self.reply_probability = max(0.0, min(1.0, self.reply_probability))
-        
+        # Validation
+        self.debounce_delay = _clamp(self.debounce_delay, 0, 60, "DEBOUNCE_DELAY", 3.0)
+        self.reply_probability = _clamp(self.reply_probability, 0, 1, "REPLY_PROBABILITY", 0.02)
+        self.llm_temperature = _clamp(self.llm_temperature, 0, 2, "LLM_TEMPERATURE", 1.0)
+
         if self.llm_sample_size < 1:
             log.warning("LLM_SAMPLE_SIZE must be at least 1. Resetting to 300.")
             self.llm_sample_size = 300
@@ -131,15 +179,26 @@ class Config:
             log.warning("MAX_CONTEXT_MESSAGES cannot be negative. Resetting to 20.")
             self.max_context_messages = 20
 
-        if not (0 <= self.llm_temperature <= 2.0):
-            log.warning("LLM_TEMPERATURE must be between 0 and 2. Resetting to 0.7.")
-            self.llm_temperature = 0.7
-
         if self.llm_max_tokens < 1:
-            log.warning("LLM_MAX_TOKENS must be at least 1. Resetting to 512.")
-            self.llm_max_tokens = 512
+            log.warning("LLM_MAX_TOKENS must be at least 1. Resetting to 1024.")
+            self.llm_max_tokens = 1024
 
     def update_env(self, key: str, value: str) -> None:
-        """Update a key in the .env file and update the in-memory config."""
+        """Update a key in the .env file and set the corresponding in-memory field."""
         set_key(str(_ENV_PATH), key, str(value))
 
+        field_name = _ENV_TO_FIELD.get(key)
+        if field_name is None:
+            return
+
+        current = getattr(self, field_name, None)
+        if current is None:
+            return
+
+        # Cast to the same type as the existing field
+        if isinstance(current, float):
+            setattr(self, field_name, float(value))
+        elif isinstance(current, int):
+            setattr(self, field_name, int(value))
+        else:
+            setattr(self, field_name, value)

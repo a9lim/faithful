@@ -1,4 +1,4 @@
-"""Scheduler cog — sends 1–2 unprompted messages per day at random times."""
+"""Scheduler cog — sends 1-2 unprompted messages per day at random times."""
 
 from __future__ import annotations
 
@@ -9,15 +9,16 @@ import random
 import time
 from typing import TYPE_CHECKING
 
-from discord.ext import commands, tasks
+from discord.ext import commands
+
+from faithful.backends.base import GenerationRequest
+from faithful.chunker import send_chunked
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
 
 log = logging.getLogger("faithful.scheduler")
 
-# Range for random interval between spontaneous messages (in seconds)
-# 1–2 messages per day → interval roughly 12–24 hours
 MIN_INTERVAL = 12 * 60 * 60  # 12 hours
 MAX_INTERVAL = 24 * 60 * 60  # 24 hours
 
@@ -27,11 +28,10 @@ class Scheduler(commands.Cog):
 
     def __init__(self, bot: Faithful) -> None:
         self.bot = bot
-        self._started = False
+        self._task: asyncio.Task | None = None
         self._state_file = self.bot.config.data_dir / "scheduler_state.json"
 
     def _load_next_run(self) -> float | None:
-        """Load the next scheduled run time from disk."""
         if not self._state_file.exists():
             return None
         try:
@@ -42,7 +42,6 @@ class Scheduler(commands.Cog):
             return None
 
     def _save_next_run(self, timestamp: float) -> None:
-        """Save the next scheduled run time to disk."""
         try:
             with open(self._state_file, "w", encoding="utf-8") as f:
                 json.dump({"next_run": timestamp}, f)
@@ -51,35 +50,43 @@ class Scheduler(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        if not self._started:
-            self._started = True
-            self.spontaneous_loop.start()
+        if self._task is None:
+            self._task = asyncio.create_task(self._loop())
             log.info("Spontaneous message scheduler started.")
 
     def cog_unload(self) -> None:
-        self.spontaneous_loop.cancel()
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
 
-    @tasks.loop(hours=1)  # placeholder interval; we randomise inside
-    async def spontaneous_loop(self) -> None:
-        # 1. Determine wait time
-        next_run = self._load_next_run()
-        now = time.time()
+    async def _loop(self) -> None:
+        await self.bot.wait_until_ready()
 
-        if next_run and next_run > now:
-            delay = next_run - now
-            log.info("Resuming scheduler: next spontaneous message in %.1f hours.", delay / 3600)
-        else:
-            delay = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
-            self._save_next_run(now + delay)
-            log.info("Next spontaneous message scheduled in %.1f hours.", delay / 3600)
+        while True:
+            try:
+                next_run = self._load_next_run()
+                now = time.time()
 
-        # 2. Wait
-        await asyncio.sleep(delay)
+                if next_run and next_run > now:
+                    delay = next_run - now
+                    log.info("Next spontaneous message in %.1f hours.", delay / 3600)
+                else:
+                    delay = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
+                    self._save_next_run(now + delay)
+                    log.info("Scheduled spontaneous message in %.1f hours.", delay / 3600)
 
-        # 3. Reset state for next iteration (so we generate a new one next time)
-        self._save_next_run(0)
+                await asyncio.sleep(delay)
+                self._save_next_run(0)
 
-        # 4. Attempt to send
+                await self._send_spontaneous()
+
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                log.exception("Scheduler error — retrying in 1 hour.")
+                await asyncio.sleep(3600)
+
+    async def _send_spontaneous(self) -> None:
         channels = self.bot.config.spontaneous_channels
         if not channels:
             return
@@ -87,30 +94,27 @@ class Scheduler(commands.Cog):
         if self.bot.store.count == 0:
             return
 
-        # Pick a random channel
         channel_id = random.choice(channels)
         channel = self.bot.get_channel(channel_id)
         if channel is None:
             log.warning("Spontaneous channel %d not found.", channel_id)
             return
 
+        sampled = self.bot.store.get_sampled_messages(self.bot.config.llm_sample_size)
+        request = GenerationRequest(
+            prompt="",
+            examples=sampled,
+            persona_name=self.bot.config.persona_name,
+            system_prompt_template=self.bot.config.system_prompt_template,
+        )
+
         try:
-            # Spontaneous messages use an empty prompt to trigger personality-based text
-            async with channel.typing():  # type: ignore[union-attr]
-                response = await self.bot.backend.generate(
-                    prompt="",
-                    examples=self.bot.store.get_all_text(),
-                    recent_context=[],
-                )
+            response = await self.bot.backend.generate(request)
             if response:
-                await channel.send(response)  # type: ignore[union-attr]
-                log.info("Sent spontaneous message to #%s.", channel)  # type: ignore[union-attr]
+                await send_chunked(channel, response)  # type: ignore[arg-type]
+                log.info("Sent spontaneous message to #%s.", channel)
         except Exception:
             log.exception("Failed to send spontaneous message")
-
-    @spontaneous_loop.before_loop
-    async def before_spontaneous(self) -> None:
-        await self.bot.wait_until_ready()
 
 
 async def setup(bot: Faithful) -> None:

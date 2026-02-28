@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .anthropic_backend import AnthropicBackend
+from .gemini_backend import GeminiBackend
 from .markov import MarkovBackend
 from .ollama_backend import OllamaBackend
 from .openai_backend import OpenAIBackend
@@ -14,6 +16,8 @@ _BACKENDS: dict[str, type[Backend]] = {
     "markov": MarkovBackend,
     "ollama": OllamaBackend,
     "openai": OpenAIBackend,
+    "gemini": GeminiBackend,
+    "anthropic": AnthropicBackend,
 }
 
 

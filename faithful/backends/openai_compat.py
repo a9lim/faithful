@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +47,7 @@ class OpenAICompatibleBackend(Backend):
                 {"type": "text", "text": last.get("content", "")},
             ]
             for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
+                b64 = att.b64
                 content.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:{att.content_type};base64,{b64}"},
@@ -109,10 +108,7 @@ class OpenAICompatibleBackend(Backend):
         tool_calls: list[ToolCall] = []
 
         for tc in msg.tool_calls or []:
-            try:
-                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-            except (json.JSONDecodeError, TypeError):
-                args = {}
+            args = self._parse_json_args(tc.function.arguments)
             tool_calls.append(ToolCall(
                 id=tc.id,
                 name=tc.function.name,

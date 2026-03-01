@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 from typing import TYPE_CHECKING, Any
 
 import anthropic
@@ -75,7 +74,7 @@ class AnthropicBackend(Backend):
         text = last["content"] if isinstance(last["content"], str) else ""
         content: list[dict[str, Any]] = []
         for att in attachments:
-            b64 = base64.b64encode(att.data).decode()
+            b64 = att.b64
             content.append({
                 "type": "image",
                 "source": {

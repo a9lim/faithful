@@ -4,22 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+from faithful.backends.base import ToolCall as ToolCall  # noqa: F401
 
 if TYPE_CHECKING:
     from .memory import MemoryStore
 
 log = logging.getLogger("faithful.tools")
-
-
-@dataclass
-class ToolCall:
-    """A tool invocation parsed from an LLM response."""
-
-    id: str
-    name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 # ── Provider-agnostic tool definitions ───────────────────

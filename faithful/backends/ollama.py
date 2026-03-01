@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import json
 from typing import TYPE_CHECKING, Any
 
 import ollama
@@ -35,9 +33,7 @@ class OllamaBackend(Backend):
 
         if attachments:
             last = full_messages[-1]
-            last["images"] = [
-                base64.b64encode(att.data).decode() for att in attachments
-            ]
+            last["images"] = [att.b64 for att in attachments]
 
         response = await self._client.chat(
             model=self.config.model or DEFAULT_MODEL,
@@ -78,9 +74,7 @@ class OllamaBackend(Backend):
 
         if attachments:
             last = full_messages[-1]
-            last["images"] = [
-                base64.b64encode(att.data).decode() for att in attachments
-            ]
+            last["images"] = [att.b64 for att in attachments]
 
         response = await self._client.chat(
             model=self.config.model or DEFAULT_MODEL,
@@ -98,12 +92,7 @@ class OllamaBackend(Backend):
 
         for tc in msg.get("tool_calls", []):
             func = tc.get("function", {})
-            args = func.get("arguments", {})
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except (json.JSONDecodeError, TypeError):
-                    args = {}
+            args = self._parse_json_args(func.get("arguments"))
             tool_calls.append(ToolCall(
                 id=func.get("name", ""),
                 name=func.get("name", ""),

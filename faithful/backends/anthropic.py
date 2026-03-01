@@ -5,17 +5,15 @@ from typing import TYPE_CHECKING, Any
 
 import anthropic
 
-from .base import Attachment
-from .llm import SPONTANEOUS_PROMPT, BaseLLMBackend
+from .base import Attachment, Backend, SPONTANEOUS_PROMPT, ToolCall
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
-class AnthropicBackend(BaseLLMBackend):
+class AnthropicBackend(Backend):
     """Generates text via the Anthropic Messages API."""
 
     _has_native_search = True
@@ -135,8 +133,6 @@ class AnthropicBackend(BaseLLMBackend):
         tools: Any,
         attachments: list[Attachment] | None = None,
     ) -> tuple[str | None, list[ToolCall]]:
-        from faithful.tools import ToolCall as TC
-
         normalized = self._normalize_messages(messages)
         normalized = self._apply_attachments(normalized, attachments)
 
@@ -155,7 +151,7 @@ class AnthropicBackend(BaseLLMBackend):
         for block in message.content:
             # Only handle client-side tool_use, not server_tool_use
             if getattr(block, "type", None) == "tool_use":
-                tool_calls.append(TC(
+                tool_calls.append(ToolCall(
                     id=block.id,
                     name=block.name,
                     arguments=block.input if isinstance(block.input, dict) else {},

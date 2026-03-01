@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .anthropic_backend import AnthropicBackend
-from .gemini_backend import GeminiBackend
-from .ollama_backend import OllamaBackend
-from .openai_backend import OpenAIBackend
-from .openai_compat_backend import OpenAICompatibleBackend
+from .anthropic import AnthropicBackend
+from .gemini import GeminiBackend
+from .ollama import OllamaBackend
+from .openai import OpenAIBackend
+from .openai_compat import OpenAICompatibleBackend
 
 if TYPE_CHECKING:
     from faithful.config import Config

@@ -30,9 +30,11 @@ reply_probability = 0.02      # 0.0 to 1.0
 debounce_delay = 3.0          # Seconds to wait before responding
 conversation_expiry = 300.0   # Seconds before a conversation goes stale
 max_context_messages = 20
+enable_web_search = false    # LLM can search the web via DuckDuckGo
+enable_memory = false        # Per-user and per-channel memory
 
 # Optional: custom system prompt template
-# Available placeholders: {name}, {examples}
+# Available placeholders: {name}, {examples}, {memories}
 # system_prompt = "..."
 
 [scheduler]

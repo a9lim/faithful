@@ -33,7 +33,12 @@ Faithful is a Discord bot that emulates a persona by learning from example messa
 
 ### Backend System
 
-All backends implement `Backend` (in `backends/base.py`) with `setup(examples)` and `generate(request)`. LLM backends extend `BaseLLMBackend` (`backends/llm.py`) — subclasses only implement `_call_api(system_prompt, messages)`.
+All backends implement `Backend` (in `backends/base.py`) with `setup(examples)` and `generate(request)`. LLM backends extend `BaseLLMBackend` (`backends/llm.py`) — subclasses implement `_call_api(system_prompt, messages)` for basic generation, and optionally three tool hooks for tool-use support:
+- `_format_tools(tools)` — convert provider-agnostic defs to provider format
+- `_call_with_tools(system_prompt, messages, tools, attachments)` — call API with tools, return `(text, list[ToolCall])`
+- `_append_tool_result(messages, call, result)` — append tool result in provider format
+
+The tool loop lives in `BaseLLMBackend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (based on `enable_web_search` / `enable_memory` config flags). Backends without tool support (Markov) are unaffected.
 
 Each LLM API handles system prompts differently:
 - **OpenAI**: `"developer"` role in input messages (Responses API)
@@ -43,11 +48,21 @@ Each LLM API handles system prompts differently:
 
 Backends are registered in `backends/__init__.py` and instantiated via `get_backend(name, config)`.
 
+### Tool System
+
+Provider-agnostic tool definitions live in `tools.py`. Three tools: `web_search` (DuckDuckGo via `duckduckgo_search`), `remember_user` (reverse-lookups user ID from display name), `remember_channel`. `ToolExecutor` dispatches calls and returns JSON results.
+
+### Memory System
+
+`memory.py` provides `MemoryStore` — JSON file storage in `data/memories/users/{user_id}.json` and `data/memories/channels/{channel_id}.json`. Caps: 20 facts/user, 50 memories/channel (FIFO). Memories are injected into the system prompt via `format_memories()` in `prompt.py`. Admin commands in `/memory` group manage memories manually.
+
 ### Key Design Decisions
 
-- **`GenerationRequest`** is a frozen dataclass containing the formatted system prompt, user prompt, and conversation context
+- **`GenerationRequest`** is a frozen dataclass containing the formatted system prompt, user prompt, conversation context, `channel_id`, and `participants` dict
 - **`Config.save(field, value)`** updates both the in-memory field and the TOML file via `tomli_w`
-- **`format_system_prompt()`** in `prompt.py` handles template formatting with persona name and examples
+- **`format_system_prompt()`** in `prompt.py` handles template formatting with persona name, examples, and memories
 - **`store.get_sampled_messages()`** uses index-based tracking to avoid duplicates when balancing samples across source files
 - **Scheduler** uses a plain `asyncio.Task` loop with persistent state in `scheduler_state.json`
 - **Debouncing** in chat uses per-channel `asyncio.Task` cancellation
+- **`remember_user`** tool uses display name (not user_id) since the LLM sees names in context, not IDs
+- Both `enable_web_search` and `enable_memory` default to `false` — zero behavior change without opt-in

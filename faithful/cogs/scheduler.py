@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from faithful.backends.base import GenerationRequest
 from faithful.chunker import send_chunked
-from faithful.prompt import format_system_prompt
+from faithful.prompt import format_memories, format_system_prompt
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
@@ -105,13 +105,19 @@ class Scheduler(commands.Cog):
 
         cfg = self.bot.config
         sampled = self.bot.store.get_sampled_messages(cfg.sample_size)
+
+        memories = ""
+        if cfg.enable_memory and self.bot.memory_store is not None:
+            memories = format_memories(self.bot.memory_store, channel_id, {})
+
         system_prompt = format_system_prompt(
-            cfg.system_prompt, cfg.persona_name, sampled
+            cfg.system_prompt, cfg.persona_name, sampled, memories
         )
 
         request = GenerationRequest(
             prompt="",
             system_prompt=system_prompt,
+            channel_id=channel_id,
         )
 
         try:

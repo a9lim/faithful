@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=0.40",
     "tomli>=2.0; python_version < '3.11'",
     "tomli-w>=1.0",
+    "duckduckgo-search>=7.0",
 ]
 
 [project.scripts]

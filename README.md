@@ -14,7 +14,7 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
   | `openai` | Cloud LLM via [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) | API key |
   | `gemini` | Cloud LLM via [Google Gemini](https://ai.google.dev/) | API key |
   | `anthropic` | Cloud LLM via [Anthropic Claude](https://docs.anthropic.com/) | API key |
-- **Web search** — LLM backends can search the web via DuckDuckGo when they need current information (opt-in)
+- **Web search** — LLM backends can search the web when they need current information (native server-side search for OpenAI, Anthropic, and Gemini; DuckDuckGo fallback for Ollama) (opt-in)
 - **Memory** — remembers facts about users and channels across conversations, injected into the system prompt (opt-in)
 - **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
 - **Random replies** — configurable chance of replying to any message, even when not pinged
@@ -157,7 +157,7 @@ The bot is configured via `config.toml`. See `config.example.toml` for a full re
 | `debounce_delay` | Seconds to wait for multi-message bursts | `3.0` |
 | `conversation_expiry` | Seconds before a thread is considered stale | `300.0` |
 | `max_context_messages` | Number of previous messages to include | `20` |
-| `enable_web_search` | Allow LLM to search the web via DuckDuckGo | `false` |
+| `enable_web_search` | Allow the LLM to search the web | `false` |
 | `enable_memory` | Enable per-user and per-channel memory | `false` |
 | `system_prompt` | Custom system prompt template (`{name}`, `{examples}`, `{memories}` placeholders) | (built-in) |
 

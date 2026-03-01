@@ -46,12 +46,7 @@ class Faithful(commands.Bot):
             from .memory import MemoryStore
             self.memory_store = MemoryStore(config.data_dir)
 
-        self._set_backend_memory()
-
-    def _set_backend_memory(self) -> None:
-        """Wire the memory store into the active backend."""
-        if hasattr(self.backend, "memory_store"):
-            self.backend.memory_store = self.memory_store
+        self.backend.memory_store = self.memory_store
 
     async def setup_hook(self) -> None:
         await self.load_extension("faithful.cogs.admin")
@@ -73,16 +68,6 @@ class Faithful(commands.Bot):
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id)
         activity = discord.CustomActivity(name="being me")
         await self.change_presence(activity=activity)
-
-    async def swap_backend(self, name: str) -> None:
-        """Hot-swap the active text-generation backend."""
-        self.backend = get_backend(name, self.config)
-        self._set_backend_memory()
-        self.config.save("active_backend", name)
-        examples = self.store.list_messages()
-        if examples:
-            await self.backend.setup(examples)
-        log.info("Swapped backend to '%s'.", name)
 
     async def refresh_backend(self) -> None:
         """Re-setup the current backend (call after message corpus changes)."""

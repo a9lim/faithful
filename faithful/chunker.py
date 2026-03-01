@@ -4,8 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 
 import discord
+
+
+_REACTION_PATTERN = re.compile(r"\[react:\s*([^\]]+)\]")
+
+
+def extract_reactions(text: str) -> tuple[str, list[str]]:
+    """Strip [react: emoji] markers from text and return (clean_text, reactions)."""
+    reactions = _REACTION_PATTERN.findall(text)
+    clean = _REACTION_PATTERN.sub("", text).strip()
+    return clean, [r.strip() for r in reactions if r.strip()]
 
 
 def chunk_response(text: str) -> list[str]:
@@ -54,9 +65,22 @@ def typing_delay(text: str) -> float:
     return max(1.0, min(delay, 5.0))
 
 
-async def send_chunked(channel: discord.abc.Messageable, text: str) -> None:
+async def send_chunked(
+    channel: discord.abc.Messageable,
+    text: str,
+    react_target: discord.Message | None = None,
+) -> None:
     """Chunk *text* and send each piece with a typing indicator."""
-    for chunk in chunk_response(text):
+    clean_text, reactions = extract_reactions(text)
+
+    for chunk in chunk_response(clean_text):
         async with channel.typing():
             await asyncio.sleep(typing_delay(chunk))
             await channel.send(chunk)
+
+    if react_target and reactions:
+        for emoji in reactions:
+            try:
+                await react_target.add_reaction(emoji)
+            except discord.DiscordException:
+                pass

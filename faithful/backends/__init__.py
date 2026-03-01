@@ -7,6 +7,7 @@ from .gemini_backend import GeminiBackend
 from .markov import MarkovBackend
 from .ollama_backend import OllamaBackend
 from .openai_backend import OpenAIBackend
+from .openai_compat_backend import OpenAICompatibleBackend
 
 if TYPE_CHECKING:
     from faithful.config import Config
@@ -16,6 +17,7 @@ _BACKENDS: dict[str, type[Backend]] = {
     "markov": MarkovBackend,
     "ollama": OllamaBackend,
     "openai": OpenAIBackend,
+    "openai-compatible": OpenAICompatibleBackend,
     "gemini": GeminiBackend,
     "anthropic": AnthropicBackend,
 }

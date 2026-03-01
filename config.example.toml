@@ -7,7 +7,7 @@ admin_user_id = 0     # Required: your Discord user ID
 admin_only_upload = true
 
 [backend]
-# Options: markov, openai, ollama, gemini, anthropic
+# Options: markov, openai, openai-compatible, ollama, gemini, anthropic
 active = "markov"
 
 # API key and model for the active LLM backend
@@ -16,7 +16,7 @@ api_key = ""
 model = ""
 
 # Optional provider-specific settings
-# base_url = "https://api.openai.com/v1"   # OpenAI-compatible API endpoint
+# base_url = ""                            # Required for openai-compatible (e.g. "http://localhost:1234/v1")
 # host = "http://localhost:11434"           # Ollama server address
 
 [llm]
@@ -30,7 +30,7 @@ reply_probability = 0.02      # 0.0 to 1.0
 debounce_delay = 3.0          # Seconds to wait before responding
 conversation_expiry = 300.0   # Seconds before a conversation goes stale
 max_context_messages = 20
-enable_web_search = false    # LLM can search the web (native for OpenAI/Anthropic/Gemini, DuckDuckGo for Ollama)
+enable_web_search = false    # LLM can search the web (native for OpenAI/Anthropic/Gemini, DuckDuckGo for Ollama/openai-compatible)
 enable_memory = false        # Per-user and per-channel memory
 
 # Optional: custom system prompt template

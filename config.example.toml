@@ -3,15 +3,13 @@
 
 [discord]
 token = ""            # Required: your Discord bot token
-admin_user_id = 0     # Required: your Discord user ID
-admin_only_upload = true
+admin_ids = []        # Required: list of Discord user IDs, e.g. [123456789, 987654321]
 
 [backend]
-# Options: markov, openai, openai-compatible, ollama, gemini, anthropic
-active = "markov"
+# Options: openai, openai-compatible, ollama, gemini, anthropic
+active = "openai-compatible"
 
 # API key and model for the active LLM backend
-# Not needed for markov; ollama only needs model
 api_key = ""
 model = ""
 
@@ -26,15 +24,16 @@ sample_size = 300     # Example messages to include in system prompt
 
 [behavior]
 persona_name = "faithful"
-reply_probability = 0.02      # 0.0 to 1.0
+reply_probability = 0.02      # 0.0 to 1.0 — chance to reply to random messages
+reaction_probability = 0.05   # 0.0 to 1.0 — chance to react to messages without replying
 debounce_delay = 3.0          # Seconds to wait before responding
 conversation_expiry = 300.0   # Seconds before a conversation goes stale
 max_context_messages = 20
-enable_web_search = false    # LLM can search the web (native for OpenAI/Anthropic/Gemini, DuckDuckGo for Ollama/openai-compatible)
-enable_memory = false        # Per-user and per-channel memory
+enable_web_search = false     # LLM can search the web
+enable_memory = false         # Per-user and per-channel memory
 
 # Optional: custom system prompt template
-# Available placeholders: {name}, {examples}, {memories}
+# Available placeholders: {name}, {examples}, {memories}, {custom_emojis}
 # system_prompt = "..."
 
 [scheduler]

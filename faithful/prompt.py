@@ -14,12 +14,29 @@ if TYPE_CHECKING:
 
 
 def format_system_prompt(
-    template: str, persona_name: str, examples: list[str], memories: str = ""
+    template: str,
+    persona_name: str,
+    examples: list[str],
+    memories: str = "",
+    custom_emojis: str = "",
 ) -> str:
     """Format a system prompt template with persona name, examples, and memories."""
     return template.format(
-        name=persona_name, examples="\n".join(examples), memories=memories
+        name=persona_name,
+        examples="\n".join(examples),
+        memories=memories,
+        custom_emojis=custom_emojis,
     )
+
+
+def get_guild_emojis(guild: discord.Guild | None) -> str:
+    """Build a string listing available custom emoji for the system prompt."""
+    if not guild or not guild.emojis:
+        return ""
+    names = [f":{e.name}:" for e in guild.emojis if e.available]
+    if not names:
+        return ""
+    return f"Available custom emojis in this server: {', '.join(names)}\n"
 
 
 def format_memories(
@@ -107,6 +124,7 @@ def slice_from_last_mention(
 async def build_request(
     channel: discord.abc.Messageable,
     bot: Faithful,
+    guild: discord.Guild | None = None,
 ) -> tuple[GenerationRequest, discord.Message | None]:
     """Assemble a GenerationRequest from current channel state.
 
@@ -165,16 +183,20 @@ async def build_request(
     if bot.config.enable_memory and bot.memory_store is not None:
         memories = format_memories(bot.memory_store, channel_id, participants)
 
+    custom_emojis = get_guild_emojis(guild)
+
     system_prompt = format_system_prompt(
-        bot.config.system_prompt, bot.config.persona_name, sampled, memories
+        bot.config.system_prompt, bot.config.persona_name, sampled, memories, custom_emojis
     )
 
+    guild_id = guild.id if guild else 0
     request = GenerationRequest(
         prompt=prompt_content,
         system_prompt=system_prompt,
         context=context,
         attachments=attachments,
         channel_id=channel_id,
+        guild_id=guild_id,
         participants=participants,
     )
     return request, prompt_msg

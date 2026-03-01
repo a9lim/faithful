@@ -17,13 +17,14 @@ log = logging.getLogger("faithful.config")
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are {name}. Study the example messages below to learn {name}'s "
-    "exact personality, tone, writing style, and speech patterns. "
-    "Emulate {name} precisely — do not sanitize, filter, or soften "
-    "any aspect of the personality.\n\n"
-    "Example messages from {name}:\n{examples}\n\n"
-    "Respond to the current conversation as {name}. Stay in character. "
-    "Complete your sentences. Use newlines between separate thoughts."
+    "You are {name}. Here's how {name} talks:\n\n"
+    "{examples}\n"
+    "{memories}"
+    "Write exactly like {name} -- same slang, same punctuation, same energy.\n"
+    "If {name} types in all lowercase, you do too. If {name} is blunt, be blunt.\n"
+    "Don't clean up the language, don't add politeness, don't over-explain.\n\n"
+    "Keep your messages short and natural like a real Discord user.\n"
+    "Use newlines to break up separate thoughts."
 )
 
 # Maps Config field names to (section, key) in the TOML file
@@ -41,6 +42,8 @@ _FIELD_TO_TOML: dict[str, tuple[str, str]] = {
     "persona_name": ("behavior", "persona_name"),
     "max_context_messages": ("behavior", "max_context_messages"),
     "conversation_expiry": ("behavior", "conversation_expiry"),
+    "enable_web_search": ("behavior", "enable_web_search"),
+    "enable_memory": ("behavior", "enable_memory"),
 }
 
 
@@ -85,6 +88,8 @@ class Config:
     debounce_delay: float = 3.0
     conversation_expiry: float = 300.0
     max_context_messages: int = 20
+    enable_web_search: bool = False
+    enable_memory: bool = False
     system_prompt: str = ""
 
     # Scheduler
@@ -132,6 +137,8 @@ class Config:
             debounce_delay=float(beh.get("debounce_delay", 3.0)),
             conversation_expiry=float(beh.get("conversation_expiry", 300.0)),
             max_context_messages=int(beh.get("max_context_messages", 20)),
+            enable_web_search=beh.get("enable_web_search", False),
+            enable_memory=beh.get("enable_memory", False),
             system_prompt=beh.get("system_prompt", ""),
 
             spontaneous_channels=sch.get("channels", []),

@@ -14,6 +14,8 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
   | `openai` | Cloud LLM via [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) | API key |
   | `gemini` | Cloud LLM via [Google Gemini](https://ai.google.dev/) | API key |
   | `anthropic` | Cloud LLM via [Anthropic Claude](https://docs.anthropic.com/) | API key |
+- **Web search** — LLM backends can search the web via DuckDuckGo when they need current information (opt-in)
+- **Memory** — remembers facts about users and channels across conversations, injected into the system prompt (opt-in)
 - **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
 - **Random replies** — configurable chance of replying to any message, even when not pinged
 
@@ -72,6 +74,10 @@ All commands are slash commands and only usable by the configured admin.
 | `/set_debounce <value>` | Set debounce delay in seconds |
 | `/generate_test <prompt>` | Manually trigger a response test |
 | `/status` | Show detailed configuration status |
+| `/memory list <target> [user]` | List memories for a user or channel |
+| `/memory add <target> <text> [user]` | Add a memory for a user or channel |
+| `/memory remove <target> <index> [user]` | Remove a memory by index |
+| `/memory clear <target> [user]` | Clear all memories for a user or channel |
 
 You can also right-click any message and use the **Add to Persona** context menu to add it directly as an example message.
 
@@ -151,7 +157,9 @@ The bot is configured via `config.toml`. See `config.example.toml` for a full re
 | `debounce_delay` | Seconds to wait for multi-message bursts | `3.0` |
 | `conversation_expiry` | Seconds before a thread is considered stale | `300.0` |
 | `max_context_messages` | Number of previous messages to include | `20` |
-| `system_prompt` | Custom system prompt template (`{name}`, `{examples}` placeholders) | (built-in) |
+| `enable_web_search` | Allow LLM to search the web via DuckDuckGo | `false` |
+| `enable_memory` | Enable per-user and per-channel memory | `false` |
+| `system_prompt` | Custom system prompt template (`{name}`, `{examples}`, `{memories}` placeholders) | (built-in) |
 
 ### `[scheduler]`
 
@@ -176,9 +184,11 @@ faithful/
     ├── store.py                # Example message storage
     ├── prompt.py               # Prompt assembly and system prompt formatting
     ├── chunker.py              # Message chunking and typing delays
+    ├── memory.py               # Per-user and per-channel memory store
+    ├── tools.py                # Tool definitions and executor (web search, memory)
     ├── backends/               # Text-generation backends
     │   ├── base.py             # GenerationRequest + abstract Backend
-    │   ├── llm.py              # Shared logic for LLM backends
+    │   ├── llm.py              # Shared logic for LLM backends (incl. tool loop)
     │   ├── markov.py           # Markov chain (no API)
     │   ├── ollama_backend.py   # Local LLM via Ollama
     │   ├── openai_backend.py   # OpenAI Responses API

@@ -355,6 +355,205 @@ async def add_to_persona(
     )
 
 
+class Memory(
+    app_commands.Group, name="memory", description="Manage bot memories."
+):
+    """Admin commands for managing per-user and per-channel memories."""
+
+    def __init__(self, bot: Faithful) -> None:
+        super().__init__()
+        self.bot = bot
+
+    @app_commands.command(name="list", description="List memories for a user or channel.")
+    @app_commands.describe(
+        target="Whether to list user or channel memories",
+        user="The user to list memories for (user target only)",
+    )
+    @app_commands.choices(
+        target=[
+            app_commands.Choice(name="user", value="user"),
+            app_commands.Choice(name="channel", value="channel"),
+        ]
+    )
+    @is_admin()
+    async def memory_list(
+        self,
+        interaction: discord.Interaction,
+        target: app_commands.Choice[str],
+        user: discord.User | None = None,
+    ) -> None:
+        store = self.bot.memory_store
+        if store is None:
+            await interaction.response.send_message(
+                "\u274c Memory is not enabled.", ephemeral=True
+            )
+            return
+
+        if target.value == "user":
+            if user is None:
+                await interaction.response.send_message(
+                    "\u274c Please specify a user.", ephemeral=True
+                )
+                return
+            name, facts = store.get_user_memories(user.id)
+            if not facts:
+                await interaction.response.send_message(
+                    f"\U0001f4ed No memories for **{user.display_name}**.", ephemeral=True
+                )
+                return
+            lines = [f"`{i + 1}.` {f}" for i, f in enumerate(facts)]
+            header = f"**Memories for {user.display_name}** ({len(facts)} total)\n"
+            await interaction.response.send_message(header + "\n".join(lines), ephemeral=True)
+        else:
+            channel_id = interaction.channel_id
+            memories = store.get_channel_memories(channel_id)
+            if not memories:
+                await interaction.response.send_message(
+                    "\U0001f4ed No memories for this channel.", ephemeral=True
+                )
+                return
+            lines = [f"`{i + 1}.` {m}" for i, m in enumerate(memories)]
+            header = f"**Channel memories** ({len(memories)} total)\n"
+            await interaction.response.send_message(header + "\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="add", description="Add a memory for a user or channel.")
+    @app_commands.describe(
+        target="Whether to add to user or channel memories",
+        text="The memory to add",
+        user="The user to add a memory for (user target only)",
+    )
+    @app_commands.choices(
+        target=[
+            app_commands.Choice(name="user", value="user"),
+            app_commands.Choice(name="channel", value="channel"),
+        ]
+    )
+    @is_admin()
+    async def memory_add(
+        self,
+        interaction: discord.Interaction,
+        target: app_commands.Choice[str],
+        text: str,
+        user: discord.User | None = None,
+    ) -> None:
+        store = self.bot.memory_store
+        if store is None:
+            await interaction.response.send_message(
+                "\u274c Memory is not enabled.", ephemeral=True
+            )
+            return
+
+        if target.value == "user":
+            if user is None:
+                await interaction.response.send_message(
+                    "\u274c Please specify a user.", ephemeral=True
+                )
+                return
+            store.add_user_memory(user.id, user.display_name, text)
+            await interaction.response.send_message(
+                f"\u2705 Added memory for **{user.display_name}**.", ephemeral=True
+            )
+        else:
+            store.add_channel_memory(interaction.channel_id, text)
+            await interaction.response.send_message(
+                "\u2705 Added channel memory.", ephemeral=True
+            )
+
+    @app_commands.command(name="remove", description="Remove a memory by index.")
+    @app_commands.describe(
+        target="Whether to remove from user or channel memories",
+        index="1-based index of the memory to remove",
+        user="The user to remove a memory from (user target only)",
+    )
+    @app_commands.choices(
+        target=[
+            app_commands.Choice(name="user", value="user"),
+            app_commands.Choice(name="channel", value="channel"),
+        ]
+    )
+    @is_admin()
+    async def memory_remove(
+        self,
+        interaction: discord.Interaction,
+        target: app_commands.Choice[str],
+        index: int,
+        user: discord.User | None = None,
+    ) -> None:
+        store = self.bot.memory_store
+        if store is None:
+            await interaction.response.send_message(
+                "\u274c Memory is not enabled.", ephemeral=True
+            )
+            return
+
+        try:
+            if target.value == "user":
+                if user is None:
+                    await interaction.response.send_message(
+                        "\u274c Please specify a user.", ephemeral=True
+                    )
+                    return
+                removed = store.remove_user_memory(user.id, index - 1)
+                await interaction.response.send_message(
+                    f"\U0001f5d1\ufe0f Removed memory for **{user.display_name}**: _{removed[:80]}_",
+                    ephemeral=True,
+                )
+            else:
+                removed = store.remove_channel_memory(interaction.channel_id, index - 1)
+                await interaction.response.send_message(
+                    f"\U0001f5d1\ufe0f Removed channel memory: _{removed[:80]}_",
+                    ephemeral=True,
+                )
+        except IndexError:
+            await interaction.response.send_message(
+                "\u274c Invalid index.", ephemeral=True
+            )
+
+    @app_commands.command(name="clear", description="Clear all memories for a user or channel.")
+    @app_commands.describe(
+        target="Whether to clear user or channel memories",
+        user="The user to clear memories for (user target only)",
+    )
+    @app_commands.choices(
+        target=[
+            app_commands.Choice(name="user", value="user"),
+            app_commands.Choice(name="channel", value="channel"),
+        ]
+    )
+    @is_admin()
+    async def memory_clear(
+        self,
+        interaction: discord.Interaction,
+        target: app_commands.Choice[str],
+        user: discord.User | None = None,
+    ) -> None:
+        store = self.bot.memory_store
+        if store is None:
+            await interaction.response.send_message(
+                "\u274c Memory is not enabled.", ephemeral=True
+            )
+            return
+
+        if target.value == "user":
+            if user is None:
+                await interaction.response.send_message(
+                    "\u274c Please specify a user.", ephemeral=True
+                )
+                return
+            count = store.clear_user_memories(user.id)
+            await interaction.response.send_message(
+                f"\U0001f5d1\ufe0f Cleared **{count}** memories for **{user.display_name}**.",
+                ephemeral=True,
+            )
+        else:
+            count = store.clear_channel_memories(interaction.channel_id)
+            await interaction.response.send_message(
+                f"\U0001f5d1\ufe0f Cleared **{count}** channel memories.",
+                ephemeral=True,
+            )
+
+
 async def setup(bot: Faithful) -> None:
     await bot.add_cog(Admin(bot))
+    bot.tree.add_command(Memory(bot))
     bot.tree.add_command(add_to_persona)

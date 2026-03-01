@@ -9,12 +9,24 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class Attachment:
+    """A downloaded file attachment (image, etc.) from a Discord message."""
+
+    filename: str
+    content_type: str
+    data: bytes
+
+
+@dataclass(frozen=True)
 class GenerationRequest:
     """Everything a backend needs to produce a response."""
 
     prompt: str
     system_prompt: str
     context: list[dict[str, str]] = field(default_factory=list)
+    attachments: list[Attachment] = field(default_factory=list)
+    channel_id: int = 0
+    participants: dict[int, str] = field(default_factory=dict)
 
 
 class Backend(ABC):

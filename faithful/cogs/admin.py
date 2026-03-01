@@ -211,6 +211,7 @@ class Admin(commands.Cog):
                 self.bot.config.system_prompt,
                 self.bot.config.persona_name,
                 sampled,
+                custom_emojis="",
             )
             request = GenerationRequest(
                 prompt=prompt,

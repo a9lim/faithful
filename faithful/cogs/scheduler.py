@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from faithful.backends.base import GenerationRequest
 from faithful.chunker import send_chunked
-from faithful.prompt import format_memories, format_system_prompt
+from faithful.prompt import format_memories, format_system_prompt, get_guild_emojis
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
@@ -103,6 +103,9 @@ class Scheduler(commands.Cog):
             log.warning("Spontaneous channel %d not found.", channel_id)
             return
 
+        guild = getattr(channel, "guild", None)
+        custom_emojis = get_guild_emojis(guild)
+
         cfg = self.bot.config
         sampled = self.bot.store.get_sampled_messages(cfg.sample_size)
 
@@ -111,13 +114,14 @@ class Scheduler(commands.Cog):
             memories = format_memories(self.bot.memory_store, channel_id, {})
 
         system_prompt = format_system_prompt(
-            cfg.system_prompt, cfg.persona_name, sampled, memories
+            cfg.system_prompt, cfg.persona_name, sampled, memories, custom_emojis
         )
 
         request = GenerationRequest(
             prompt="",
             system_prompt=system_prompt,
             channel_id=channel_id,
+            guild_id=guild.id if guild else 0,
         )
 
         try:

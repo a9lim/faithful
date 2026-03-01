@@ -12,9 +12,10 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
   | `markov` | Markov-chain text generation | None (default) |
   | `ollama` | Local LLM via [Ollama](https://ollama.com) | Ollama running locally |
   | `openai` | Cloud LLM via [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) | API key |
+  | `openai-compatible` | Any OpenAI-compatible API via [Chat Completions](https://platform.openai.com/docs/api-reference/chat) | `base_url` (API key optional) |
   | `gemini` | Cloud LLM via [Google Gemini](https://ai.google.dev/) | API key |
   | `anthropic` | Cloud LLM via [Anthropic Claude](https://docs.anthropic.com/) | API key |
-- **Web search** — LLM backends can search the web when they need current information (native server-side search for OpenAI, Anthropic, and Gemini; DuckDuckGo fallback for Ollama) (opt-in)
+- **Web search** — LLM backends can search the web when they need current information (native server-side search for OpenAI, Anthropic, and Gemini; DuckDuckGo fallback for Ollama and openai-compatible) (opt-in)
 - **Memory** — remembers facts about users and channels across conversations, injected into the system prompt (opt-in)
 - **Spontaneous messaging** — optionally sends 1–2 unprompted messages per day
 - **Random replies** — configurable chance of replying to any message, even when not pinged
@@ -68,7 +69,7 @@ All commands are slash commands and only usable by the configured admin.
 | `/remove_message <index>` | Remove a message by its index |
 | `/clear_messages` | Remove all example messages |
 | `/download_messages` | Download all messages as a `.txt` file |
-| `/set_backend <backend>` | Switch backend: `markov`, `ollama`, `openai`, `gemini`, or `anthropic` |
+| `/set_backend <backend>` | Switch backend: `markov`, `ollama`, `openai`, `openai-compatible`, `gemini`, or `anthropic` |
 | `/set_probability <value>` | Set random reply probability (0.0–1.0) |
 | `/set_temperature <value>` | Set LLM temperature (0.0–2.0) |
 | `/set_debounce <value>` | Set debounce delay in seconds |
@@ -101,7 +102,8 @@ If `channels` is configured under `[scheduler]`, the bot sends 1–2 unprompted 
 
 - **Markov** — builds a statistical model from examples and generates text that mimics patterns. No external API needed but less coherent in conversation.
 - **Ollama** — sends a system prompt with examples to a locally-running LLM. Requires [Ollama](https://ollama.com) with a model pulled (e.g., `ollama pull llama3`).
-- **OpenAI** — uses the OpenAI Responses API. Set `base_url` under `[backend]` to point to alternative providers.
+- **OpenAI** — uses the OpenAI Responses API with native web search support.
+- **OpenAI-compatible** — uses the standard Chat Completions API. Works with LM Studio, vLLM, text-generation-webui, and other OpenAI-compatible providers. Requires `base_url`.
 - **Gemini** — uses the Google Gemini API via the `google-genai` SDK.
 - **Anthropic** — uses the Anthropic Messages API. Handles message role alternation automatically.
 
@@ -134,10 +136,10 @@ The bot is configured via `config.toml`. See `config.example.toml` for a full re
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `active` | Backend to use: `markov`, `ollama`, `openai`, `gemini`, `anthropic` | `markov` |
+| `active` | Backend to use: `markov`, `ollama`, `openai`, `openai-compatible`, `gemini`, `anthropic` | `markov` |
 | `api_key` | API key for the active LLM backend | |
 | `model` | Model name for the active LLM backend | (per-backend default) |
-| `base_url` | Custom base URL for OpenAI-compatible APIs | |
+| `base_url` | API endpoint for `openai-compatible` backend (required) | |
 | `host` | Ollama server address | `http://localhost:11434` |
 
 ### `[llm]`
@@ -192,6 +194,7 @@ faithful/
     │   ├── markov.py           # Markov chain (no API)
     │   ├── ollama_backend.py   # Local LLM via Ollama
     │   ├── openai_backend.py   # OpenAI Responses API
+    │   ├── openai_compat_backend.py # OpenAI-compatible Chat Completions API
     │   ├── gemini_backend.py   # Google Gemini
     │   └── anthropic_backend.py # Anthropic Claude
     └── cogs/                   # Discord command/event modules

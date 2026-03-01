@@ -18,7 +18,7 @@ There is no test suite, linter, or CI pipeline configured.
 
 Config lives in `config.toml` (TOML format). Environment variables `DISCORD_TOKEN`, `ADMIN_USER_ID`, and `API_KEY` override their TOML equivalents for deployment flexibility.
 
-All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for OpenAI-compatible APIs, `host` for Ollama) are optional.
+All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible, `host` for Ollama) are optional. `base_url` is required for the openai-compatible backend.
 
 ## Architecture
 
@@ -42,6 +42,7 @@ The tool loop lives in `BaseLLMBackend._generate_with_tools()` (max 5 rounds). I
 
 Each LLM API handles system prompts differently:
 - **OpenAI**: `"developer"` role in input messages (Responses API)
+- **OpenAI-compatible**: `"system"` role prepended to messages (Chat Completions API)
 - **Ollama**: `"system"` role prepended to messages
 - **Gemini**: `system_instruction` in `GenerateContentConfig`
 - **Anthropic**: `system=` parameter (separate from messages), plus `_normalize_messages()` to enforce role alternation
@@ -50,7 +51,7 @@ Backends are registered in `backends/__init__.py` and instantiated via `get_back
 
 ### Tool System
 
-**Web search** uses native server-side tools for OpenAI (`web_search_preview`), Anthropic (`web_search_20250305`), and Gemini (`GoogleSearch` grounding). These are handled by each API automatically — no tool loop needed. Ollama falls back to DuckDuckGo via `duckduckgo_search` through the client-side tool loop. Backends with native search set `_has_native_search = True` so `_get_active_tools()` skips the DuckDuckGo tool.
+**Web search** uses native server-side tools for OpenAI (`web_search_preview`), Anthropic (`web_search_20250305`), and Gemini (`GoogleSearch` grounding). These are handled by each API automatically — no tool loop needed. Ollama and openai-compatible fall back to DuckDuckGo via `duckduckgo_search` through the client-side tool loop. Backends with native search set `_has_native_search = True` so `_get_active_tools()` skips the DuckDuckGo tool.
 
 Provider-agnostic tool definitions for memory tools live in `tools.py`: `remember_user` (reverse-lookups user ID from display name), `remember_channel`. `ToolExecutor` dispatches calls and returns JSON results.
 

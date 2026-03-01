@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "gpt-4o-mini"
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 
 class OpenAIBackend(BaseLLMBackend):
@@ -24,10 +23,7 @@ class OpenAIBackend(BaseLLMBackend):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self._client = AsyncOpenAI(
-            api_key=config.api_key,
-            base_url=config.base_url or DEFAULT_BASE_URL,
-        )
+        self._client = AsyncOpenAI(api_key=config.api_key)
 
     def _build_input(
         self,

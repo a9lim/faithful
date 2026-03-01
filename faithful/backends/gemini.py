@@ -7,17 +7,15 @@ from typing import TYPE_CHECKING, Any
 from google import genai
 from google.genai import types
 
-from .base import Attachment
-from .llm import BaseLLMBackend
+from .base import Attachment, Backend, ToolCall
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "gemini-2.0-flash"
 
 
-class GeminiBackend(BaseLLMBackend):
+class GeminiBackend(Backend):
     """Generates text via the Google Gemini API."""
 
     _has_native_search = True
@@ -100,8 +98,6 @@ class GeminiBackend(BaseLLMBackend):
         tools: Any,
         attachments: list[Attachment] | None = None,
     ) -> tuple[str | None, list[ToolCall]]:
-        from faithful.tools import ToolCall as TC
-
         contents = self._to_contents(messages)
 
         if attachments:
@@ -136,7 +132,7 @@ class GeminiBackend(BaseLLMBackend):
                 elif part.function_call:
                     fc = part.function_call
                     args = dict(fc.args) if fc.args else {}
-                    tool_calls.append(TC(
+                    tool_calls.append(ToolCall(
                         id=fc.name,  # Gemini doesn't have separate call IDs
                         name=fc.name,
                         arguments=args,

@@ -6,17 +6,15 @@ from typing import TYPE_CHECKING, Any
 
 from openai import AsyncOpenAI
 
-from .base import Attachment
-from .llm import BaseLLMBackend
+from .base import Attachment, Backend, ToolCall
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
-class OpenAIBackend(BaseLLMBackend):
+class OpenAIBackend(Backend):
     """Generates text via the OpenAI Responses API."""
 
     _has_native_search = True
@@ -88,8 +86,6 @@ class OpenAIBackend(BaseLLMBackend):
         tools: Any,
         attachments: list[Attachment] | None = None,
     ) -> tuple[str | None, list[ToolCall]]:
-        from faithful.tools import ToolCall as TC
-
         input_messages = self._build_input(system_prompt, messages, attachments)
 
         response = await self._client.responses.create(
@@ -113,7 +109,7 @@ class OpenAIBackend(BaseLLMBackend):
                     args = json.loads(item.arguments) if item.arguments else {}
                 except (json.JSONDecodeError, TypeError):
                     args = {}
-                tool_calls.append(TC(id=item.call_id, name=item.name, arguments=args))
+                tool_calls.append(ToolCall(id=item.call_id, name=item.name, arguments=args))
             # web_search_call is handled server-side — ignore it
 
         return text, tool_calls

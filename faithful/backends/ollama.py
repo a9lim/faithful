@@ -6,18 +6,16 @@ from typing import TYPE_CHECKING, Any
 
 import ollama
 
-from .base import Attachment
-from .llm import BaseLLMBackend
+from .base import Attachment, Backend, ToolCall
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "llama3"
 DEFAULT_HOST = "http://localhost:11434"
 
 
-class OllamaBackend(BaseLLMBackend):
+class OllamaBackend(Backend):
     """Generates text using a local LLM served by Ollama."""
 
     def __init__(self, config: Config) -> None:
@@ -73,8 +71,6 @@ class OllamaBackend(BaseLLMBackend):
         tools: Any,
         attachments: list[Attachment] | None = None,
     ) -> tuple[str | None, list[ToolCall]]:
-        from faithful.tools import ToolCall as TC
-
         full_messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
             *messages,
@@ -108,7 +104,7 @@ class OllamaBackend(BaseLLMBackend):
                     args = json.loads(args)
                 except (json.JSONDecodeError, TypeError):
                     args = {}
-            tool_calls.append(TC(
+            tool_calls.append(ToolCall(
                 id=func.get("name", ""),
                 name=func.get("name", ""),
                 arguments=args,

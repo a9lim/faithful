@@ -6,17 +6,15 @@ from typing import TYPE_CHECKING, Any
 
 from openai import AsyncOpenAI
 
-from .base import Attachment
-from .llm import BaseLLMBackend
+from .base import Attachment, Backend, ToolCall
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.tools import ToolCall
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
-class OpenAICompatibleBackend(BaseLLMBackend):
+class OpenAICompatibleBackend(Backend):
     """Generates text via the OpenAI-compatible Chat Completions API.
 
     Works with any provider that implements ``/v1/chat/completions``
@@ -96,8 +94,6 @@ class OpenAICompatibleBackend(BaseLLMBackend):
         tools: Any,
         attachments: list[Attachment] | None = None,
     ) -> tuple[str | None, list[ToolCall]]:
-        from faithful.tools import ToolCall as TC
-
         full = self._build_messages(system_prompt, messages, attachments)
 
         response = await self._client.chat.completions.create(
@@ -117,7 +113,7 @@ class OpenAICompatibleBackend(BaseLLMBackend):
                 args = json.loads(tc.function.arguments) if tc.function.arguments else {}
             except (json.JSONDecodeError, TypeError):
                 args = {}
-            tool_calls.append(TC(
+            tool_calls.append(ToolCall(
                 id=tc.id,
                 name=tc.function.name,
                 arguments=args,

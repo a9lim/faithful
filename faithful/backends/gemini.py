@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import json
 from typing import TYPE_CHECKING, Any
 
 from google import genai
@@ -54,7 +52,7 @@ class GeminiBackend(Backend):
         if attachments:
             last_parts = contents[-1]["parts"]
             for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
+                b64 = att.b64
                 last_parts.append({
                     "inline_data": {
                         "mime_type": att.content_type,
@@ -103,7 +101,7 @@ class GeminiBackend(Backend):
         if attachments:
             last_parts = contents[-1]["parts"]
             for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
+                b64 = att.b64
                 last_parts.append({
                     "inline_data": {
                         "mime_type": att.content_type,
@@ -156,10 +154,7 @@ class GeminiBackend(Backend):
             )],
         })
         # User message with FunctionResponse part
-        try:
-            result_dict = json.loads(result)
-        except (json.JSONDecodeError, TypeError):
-            result_dict = {"result": result}
+        result_dict = self._parse_json_args(result)
         messages.append({
             "role": "user",
             "parts": [types.Part.from_function_response(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +38,7 @@ class OpenAIBackend(Backend):
                 {"type": "input_text", "text": last.get("content", "")},
             ]
             for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
+                b64 = att.b64
                 content.append({
                     "type": "input_image",
                     "image_url": f"data:{att.content_type};base64,{b64}",
@@ -105,10 +104,7 @@ class OpenAIBackend(Backend):
                     if hasattr(part, "text"):
                         text = part.text
             elif item.type == "function_call":
-                try:
-                    args = json.loads(item.arguments) if item.arguments else {}
-                except (json.JSONDecodeError, TypeError):
-                    args = {}
+                args = self._parse_json_args(item.arguments)
                 tool_calls.append(ToolCall(id=item.call_id, name=item.name, arguments=args))
             # web_search_call is handled server-side — ignore it
 

@@ -42,12 +42,15 @@ class BaseLLMBackend(Backend):
     ) -> str:
         """Send messages to the provider and return the response text."""
 
+    _has_native_search: bool = False
+    """Subclasses with server-side web search set this to True."""
+
     def _get_active_tools(self) -> list[dict[str, Any]]:
         """Return provider-agnostic tool defs enabled by config."""
         from faithful.tools import TOOL_REMEMBER_CHANNEL, TOOL_REMEMBER_USER, TOOL_WEB_SEARCH
 
         tools: list[dict[str, Any]] = []
-        if self.config.enable_web_search:
+        if self.config.enable_web_search and not self._has_native_search:
             tools.append(TOOL_WEB_SEARCH)
         if self.config.enable_memory and self.memory_store is not None:
             tools.append(TOOL_REMEMBER_USER)

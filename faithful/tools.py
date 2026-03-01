@@ -110,13 +110,18 @@ class ToolExecutor:
         if not query:
             return json.dumps({"error": "Empty search query."})
         try:
-            from duckduckgo_search import AsyncDDGS
+            from duckduckgo_search import DDGS
         except ImportError:
             return json.dumps({"error": "Web search unavailable (duckduckgo-search not installed)."})
 
+        import asyncio
+        import functools
+
         try:
-            async with AsyncDDGS() as ddgs:
-                results = await ddgs.atext(query, max_results=5)
+            loop = asyncio.get_running_loop()
+            results = await loop.run_in_executor(
+                None, functools.partial(DDGS().text, query, max_results=5)
+            )
             if not results:
                 return json.dumps({"results": [], "note": "No results found."})
             formatted = [

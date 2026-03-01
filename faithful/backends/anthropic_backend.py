@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 from typing import TYPE_CHECKING, Any
 
 import anthropic
@@ -18,6 +17,8 @@ DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 class AnthropicBackend(BaseLLMBackend):
     """Generates text via the Anthropic Messages API."""
+
+    _has_native_search = True
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
@@ -56,6 +57,45 @@ class AnthropicBackend(BaseLLMBackend):
 
         return merged or [{"role": "user", "content": SPONTANEOUS_PROMPT}]
 
+    @staticmethod
+    def _extract_text(content: list[Any]) -> str:
+        """Extract text from response content blocks, skipping server tool blocks."""
+        parts: list[str] = []
+        for block in content:
+            if getattr(block, "type", None) == "text" and hasattr(block, "text"):
+                parts.append(block.text)
+        return "\n".join(parts).strip()
+
+    def _apply_attachments(
+        self,
+        normalized: list[dict[str, Any]],
+        attachments: list[Attachment] | None,
+    ) -> list[dict[str, Any]]:
+        if not attachments:
+            return normalized
+        last = normalized[-1]
+        text = last["content"] if isinstance(last["content"], str) else ""
+        content: list[dict[str, Any]] = []
+        for att in attachments:
+            b64 = base64.b64encode(att.data).decode()
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": att.content_type,
+                    "data": b64,
+                },
+            })
+        content.append({"type": "text", "text": text})
+        normalized[-1] = {"role": last["role"], "content": content}
+        return normalized
+
+    def _native_search_tool(self) -> list[dict[str, Any]]:
+        """Return the Anthropic server-side web search tool if enabled."""
+        if self.config.enable_web_search:
+            return [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
+        return []
+
     async def _call_api(
         self,
         system_prompt: str,
@@ -63,23 +103,9 @@ class AnthropicBackend(BaseLLMBackend):
         attachments: list[Attachment] | None = None,
     ) -> str:
         normalized = self._normalize_messages(messages)
+        normalized = self._apply_attachments(normalized, attachments)
 
-        if attachments:
-            last = normalized[-1]
-            text = last["content"] if isinstance(last["content"], str) else ""
-            content: list[dict[str, Any]] = []
-            for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
-                content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": att.content_type,
-                        "data": b64,
-                    },
-                })
-            content.append({"type": "text", "text": text})
-            normalized[-1] = {"role": last["role"], "content": content}
+        tools = self._native_search_tool()
 
         message = await self._client.messages.create(
             model=self.config.model or DEFAULT_MODEL,
@@ -87,16 +113,20 @@ class AnthropicBackend(BaseLLMBackend):
             temperature=self.config.temperature,
             system=system_prompt,
             messages=normalized,
+            **({"tools": tools} if tools else {}),
         )
-        return (message.content[0].text or "").strip()
+        return self._extract_text(message.content)
 
     # ── Tool support ─────────────────────────────────────
 
     def _format_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [
+        formatted = [
             {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
             for t in tools
         ]
+        # Prepend native search tool
+        formatted = self._native_search_tool() + formatted
+        return formatted
 
     async def _call_with_tools(
         self,
@@ -108,23 +138,7 @@ class AnthropicBackend(BaseLLMBackend):
         from faithful.tools import ToolCall as TC
 
         normalized = self._normalize_messages(messages)
-
-        if attachments:
-            last = normalized[-1]
-            text = last["content"] if isinstance(last["content"], str) else ""
-            content: list[dict[str, Any]] = []
-            for att in attachments:
-                b64 = base64.b64encode(att.data).decode()
-                content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": att.content_type,
-                        "data": b64,
-                    },
-                })
-            content.append({"type": "text", "text": text})
-            normalized[-1] = {"role": last["role"], "content": content}
+        normalized = self._apply_attachments(normalized, attachments)
 
         message = await self._client.messages.create(
             model=self.config.model or DEFAULT_MODEL,
@@ -135,13 +149,12 @@ class AnthropicBackend(BaseLLMBackend):
             tools=tools,
         )
 
-        text_out = None
+        text_out = self._extract_text(message.content) or None
         tool_calls: list[ToolCall] = []
 
         for block in message.content:
-            if block.type == "text":
-                text_out = block.text
-            elif block.type == "tool_use":
+            # Only handle client-side tool_use, not server_tool_use
+            if getattr(block, "type", None) == "tool_use":
                 tool_calls.append(TC(
                     id=block.id,
                     name=block.name,

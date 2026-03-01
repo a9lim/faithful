@@ -20,6 +20,8 @@ DEFAULT_MODEL = "gemini-2.0-flash"
 class GeminiBackend(BaseLLMBackend):
     """Generates text via the Google Gemini API."""
 
+    _has_native_search = True
+
     def __init__(self, config: Config) -> None:
         super().__init__(config)
         self._client = genai.Client(api_key=config.api_key)
@@ -36,6 +38,12 @@ class GeminiBackend(BaseLLMBackend):
                 role = "model" if msg.get("role") == "assistant" else "user"
                 contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
         return contents
+
+    def _search_tools(self) -> list[types.Tool] | None:
+        """Return Google Search grounding tool if enabled."""
+        if self.config.enable_web_search:
+            return [types.Tool(google_search=types.GoogleSearch())]
+        return None
 
     async def _call_api(
         self,
@@ -63,6 +71,7 @@ class GeminiBackend(BaseLLMBackend):
                 system_instruction=system_prompt,
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
+                tools=self._search_tools(),
             ),
         )
         return (response.text or "").strip()
@@ -77,7 +86,12 @@ class GeminiBackend(BaseLLMBackend):
                 description=t["description"],
                 parameters=t["parameters"],
             ))
-        return [types.Tool(function_declarations=declarations)]
+        all_tools: list[types.Tool] = [types.Tool(function_declarations=declarations)]
+        # Add Google Search grounding alongside function tools
+        search = self._search_tools()
+        if search:
+            all_tools.extend(search)
+        return all_tools
 
     async def _call_with_tools(
         self,

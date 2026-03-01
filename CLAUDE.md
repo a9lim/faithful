@@ -38,7 +38,7 @@ All backends implement `Backend` (in `backends/base.py`) with `setup(examples)` 
 - `_call_with_tools(system_prompt, messages, tools, attachments)` — call API with tools, return `(text, list[ToolCall])`
 - `_append_tool_result(messages, call, result)` — append tool result in provider format
 
-The tool loop lives in `BaseLLMBackend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (based on `enable_web_search` / `enable_memory` config flags). Backends without tool support (Markov) are unaffected.
+The tool loop lives in `BaseLLMBackend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (memory tools, or DuckDuckGo web search for Ollama). Backends without tool support (Markov) are unaffected.
 
 Each LLM API handles system prompts differently:
 - **OpenAI**: `"developer"` role in input messages (Responses API)
@@ -50,7 +50,9 @@ Backends are registered in `backends/__init__.py` and instantiated via `get_back
 
 ### Tool System
 
-Provider-agnostic tool definitions live in `tools.py`. Three tools: `web_search` (DuckDuckGo via `duckduckgo_search`), `remember_user` (reverse-lookups user ID from display name), `remember_channel`. `ToolExecutor` dispatches calls and returns JSON results.
+**Web search** uses native server-side tools for OpenAI (`web_search_preview`), Anthropic (`web_search_20250305`), and Gemini (`GoogleSearch` grounding). These are handled by each API automatically — no tool loop needed. Ollama falls back to DuckDuckGo via `duckduckgo_search` through the client-side tool loop. Backends with native search set `_has_native_search = True` so `_get_active_tools()` skips the DuckDuckGo tool.
+
+Provider-agnostic tool definitions for memory tools live in `tools.py`: `remember_user` (reverse-lookups user ID from display name), `remember_channel`. `ToolExecutor` dispatches calls and returns JSON results.
 
 ### Memory System
 

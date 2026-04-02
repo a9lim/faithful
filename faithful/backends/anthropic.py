@@ -11,11 +11,14 @@ if TYPE_CHECKING:
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
+MAX_PAUSE_TURNS = 10
+
 
 class AnthropicBackend(Backend):
     """Generates text via the Anthropic Messages API."""
 
-    _has_native_search = True
+    _has_native_server_tools = True
+    _has_native_memory = True
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
@@ -26,7 +29,6 @@ class AnthropicBackend(Backend):
         messages: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Ensure strict user/assistant alternation required by the Anthropic API."""
-        # Drop leading assistant messages
         start = 0
         for i, msg in enumerate(messages):
             if msg["role"] != "assistant":
@@ -35,13 +37,11 @@ class AnthropicBackend(Backend):
         else:
             return [{"role": "user", "content": SPONTANEOUS_PROMPT}]
 
-        # Merge consecutive same-role messages
         merged: list[dict[str, Any]] = []
         for msg in messages[start:]:
             if merged and merged[-1]["role"] == msg["role"]:
                 prev_content = merged[-1]["content"]
                 curr_content = msg["content"]
-                # Only merge when both are plain strings
                 if isinstance(prev_content, str) and isinstance(curr_content, str):
                     merged[-1] = {
                         "role": msg["role"],
@@ -87,10 +87,19 @@ class AnthropicBackend(Backend):
         normalized[-1] = {"role": last["role"], "content": content}
         return normalized
 
-    def _native_search_tool(self) -> list[dict[str, Any]]:
-        """Return the Anthropic server-side web search tool if enabled."""
+    def _native_server_tools(self) -> list[dict[str, Any]]:
+        """Return Anthropic server-side tools enabled by config."""
+        tools: list[dict[str, Any]] = []
         if self.config.enable_web_search:
-            return [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
+            tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 3})
+            tools.append({"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 3})
+            tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+        return tools
+
+    def _native_memory_tool(self) -> list[dict[str, Any]]:
+        """Return the Anthropic memory tool if enabled."""
+        if self.config.enable_memory:
+            return [{"type": "memory_20250818", "name": "memory"}]
         return []
 
     async def _call_api(
@@ -102,7 +111,7 @@ class AnthropicBackend(Backend):
         normalized = self._normalize_messages(messages)
         normalized = self._apply_attachments(normalized, attachments)
 
-        tools = self._native_search_tool()
+        tools = self._native_server_tools() + self._native_memory_tool()
 
         message = await self._client.messages.create(
             model=self.config.model or DEFAULT_MODEL,
@@ -112,17 +121,33 @@ class AnthropicBackend(Backend):
             messages=normalized,
             **({"tools": tools} if tools else {}),
         )
+
+        # Handle pause_turn for server-side tool loops
+        for _ in range(MAX_PAUSE_TURNS):
+            if message.stop_reason != "pause_turn":
+                break
+            normalized.append({"role": "assistant", "content": message.content})
+            message = await self._client.messages.create(
+                model=self.config.model or DEFAULT_MODEL,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                system=system_prompt,
+                messages=normalized,
+                **({"tools": tools} if tools else {}),
+            )
+
         return self._extract_text(message.content)
 
     # ── Tool support ─────────────────────────────────────
 
     def _format_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Format client-side tools (continue)
         formatted = [
             {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
             for t in tools
         ]
-        # Prepend native search tool
-        formatted = self._native_search_tool() + formatted
+        # Prepend native server tools + memory tool
+        formatted = self._native_server_tools() + self._native_memory_tool() + formatted
         return formatted
 
     async def _call_with_tools(
@@ -143,6 +168,20 @@ class AnthropicBackend(Backend):
             messages=normalized,
             tools=tools,
         )
+
+        # Handle pause_turn for server-side tool loops
+        for _ in range(MAX_PAUSE_TURNS):
+            if message.stop_reason != "pause_turn":
+                break
+            normalized.append({"role": "assistant", "content": message.content})
+            message = await self._client.messages.create(
+                model=self.config.model or DEFAULT_MODEL,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                system=system_prompt,
+                messages=normalized,
+                tools=tools,
+            )
 
         text_out = self._extract_text(message.content) or None
         tool_calls: list[ToolCall] = []
@@ -165,7 +204,6 @@ class AnthropicBackend(Backend):
         result: str,
     ) -> list[Any]:
         messages = list(messages)
-        # Append assistant message with tool_use block
         messages.append({
             "role": "assistant",
             "content": [
@@ -177,7 +215,6 @@ class AnthropicBackend(Backend):
                 }
             ],
         })
-        # Append user message with tool_result block
         messages.append({
             "role": "user",
             "content": [

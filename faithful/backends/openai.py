@@ -16,7 +16,7 @@ DEFAULT_MODEL = "gpt-4o-mini"
 class OpenAIBackend(Backend):
     """Generates text via the OpenAI Responses API."""
 
-    _has_native_search = True
+    _has_native_server_tools = True
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)

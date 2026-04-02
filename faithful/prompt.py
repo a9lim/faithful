@@ -10,23 +10,33 @@ from .backends.base import Attachment, GenerationRequest
 
 if TYPE_CHECKING:
     from .bot import Faithful
-    from .memory import MemoryStore
 
 
 def format_system_prompt(
     template: str,
     persona_name: str,
     examples: list[str],
-    memories: str = "",
     custom_emojis: str = "",
+    enable_memory: bool = False,
+    has_native_memory: bool = False,
 ) -> str:
-    """Format a system prompt template with persona name, examples, and memories."""
-    return template.format(
+    """Format a system prompt template with persona name and examples."""
+    prompt = template.format(
         name=persona_name,
         examples="\n".join(examples),
-        memories=memories,
         custom_emojis=custom_emojis,
     )
+    # Inject memory protocol for non-Anthropic backends
+    if enable_memory and not has_native_memory:
+        memory_protocol = (
+            "\n\nIMPORTANT: ALWAYS VIEW YOUR MEMORY DIRECTORY BEFORE DOING ANYTHING ELSE.\n"
+            "MEMORY PROTOCOL:\n"
+            "1. Use the `view` command of your `memory` tool to check for earlier progress.\n"
+            "2. As you work, record status / progress / thoughts in your memory.\n"
+            "ASSUME INTERRUPTION: Your context window might be reset at any moment.\n"
+        )
+        prompt += memory_protocol
+    return prompt
 
 
 def get_guild_emojis(guild: discord.Guild | None) -> str:
@@ -38,32 +48,6 @@ def get_guild_emojis(guild: discord.Guild | None) -> str:
         return ""
     return f"Available custom emojis in this server: {', '.join(names)}\n"
 
-
-def format_memories(
-    memory_store: MemoryStore,
-    channel_id: int,
-    participants: dict[int, str],
-) -> str:
-    """Build formatted memory sections for the system prompt."""
-    sections: list[str] = []
-
-    # User memories
-    for user_id, display_name in participants.items():
-        _, facts = memory_store.get_user_memories(user_id)
-        if facts:
-            lines = "\n".join(f"- {f}" for f in facts)
-            sections.append(f"What you know about {display_name}:\n{lines}")
-
-    # Channel memories
-    channel_mems = memory_store.get_channel_memories(channel_id)
-    if channel_mems:
-        lines = "\n".join(f"- {m}" for m in channel_mems)
-        sections.append(f"What you know about this channel:\n{lines}")
-
-    if not sections:
-        return ""
-
-    return "\n".join(sections) + "\n\n"
 
 
 def _attachment_annotations(msg: discord.Message) -> str:
@@ -175,18 +159,19 @@ async def build_request(
     context = build_context(context_msgs, bot.user)
     sampled = bot.store.get_sampled_messages(bot.config.sample_size)
 
-    # Build memory text if enabled
-    memories = ""
     channel_id = 0
     if hasattr(channel, "id"):
         channel_id = channel.id  # type: ignore[union-attr]
-    if bot.config.enable_memory and bot.memory_store is not None:
-        memories = format_memories(bot.memory_store, channel_id, participants)
 
     custom_emojis = get_guild_emojis(guild)
 
     system_prompt = format_system_prompt(
-        bot.config.system_prompt, bot.config.persona_name, sampled, memories, custom_emojis
+        bot.config.system_prompt,
+        bot.config.persona_name,
+        sampled,
+        custom_emojis,
+        enable_memory=bot.config.enable_memory,
+        has_native_memory=getattr(bot.backend, '_has_native_memory', False),
     )
 
     guild_id = guild.id if guild else 0

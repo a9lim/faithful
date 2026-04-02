@@ -12,7 +12,6 @@ from .store import MessageStore
 if TYPE_CHECKING:
     from .backends.base import Backend
     from .config import Config
-    from .memory import MemoryStore as MemoryStoreType
 
 log = logging.getLogger("faithful")
 
@@ -23,7 +22,6 @@ class Faithful(commands.Bot):
     config: Config
     store: MessageStore
     backend: Backend
-    memory_store: MemoryStoreType | None
 
     def __init__(self, config: Config) -> None:
         intents = discord.Intents.default()
@@ -40,13 +38,10 @@ class Faithful(commands.Bot):
         self.config = config
         self.store = MessageStore(config)
         self.backend = get_backend(config.active_backend, config)
-        self.memory_store = None
-
         if config.enable_memory:
-            from .memory import MemoryStore
-            self.memory_store = MemoryStore(config.data_dir)
-
-        self.backend.memory_store = self.memory_store
+            memory_dir = config.data_dir / "memories"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            self.backend.memory_base_dir = memory_dir
 
     async def setup_hook(self) -> None:
         await self.load_extension("faithful.cogs.admin")

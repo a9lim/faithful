@@ -16,7 +16,7 @@ DEFAULT_MODEL = "gemini-2.0-flash"
 class GeminiBackend(Backend):
     """Generates text via the Google Gemini API."""
 
-    _has_native_search = True
+    _has_native_server_tools = True
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)

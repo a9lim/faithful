@@ -3,13 +3,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from pathlib import Path
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from faithful.config import Config
-    from faithful.memory import MemoryStore
 
 log = logging.getLogger("faithful.llm")
 
@@ -19,6 +20,7 @@ SPONTANEOUS_PROMPT = (
 )
 
 MAX_TOOL_ROUNDS = 5
+MAX_CONTINUES = 5
 
 
 @dataclass(frozen=True)
@@ -64,10 +66,14 @@ class Backend(ABC):
     ``_call_with_tools``, and ``_append_tool_result``.
     """
 
-    memory_store: MemoryStore | None = None
+    memory_base_dir: Path | None = None
+    """Set by the bot to data_dir / "memories" when memory is enabled."""
 
-    _has_native_search: bool = False
-    """Subclasses with server-side web search set this to True."""
+    _has_native_server_tools: bool = False
+    """Subclasses with server-side web search/fetch/code-execution set this to True."""
+
+    _has_native_memory: bool = False
+    """Subclasses with a native memory tool type set this to True."""
 
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -96,17 +102,32 @@ class Backend(ABC):
 
     def _get_active_tools(self) -> list[dict[str, Any]]:
         """Return provider-agnostic tool defs enabled by config."""
-        from faithful.tools import TOOL_REMEMBER_CHANNEL, TOOL_REMEMBER_USER, TOOL_WEB_SEARCH
+        from faithful.tools import (
+            TOOL_CONTINUE,
+            TOOL_MEMORY,
+            TOOL_WEB_FETCH,
+            TOOL_WEB_SEARCH,
+        )
 
         tools: list[dict[str, Any]] = []
-        if self.config.enable_web_search and not self._has_native_search:
+        if self.config.enable_web_search and not self._has_native_server_tools:
             tools.append(TOOL_WEB_SEARCH)
-        if self.config.enable_memory and self.memory_store is not None:
-            tools.append(TOOL_REMEMBER_USER)
-            tools.append(TOOL_REMEMBER_CHANNEL)
+            tools.append(TOOL_WEB_FETCH)
+        # Anthropic backend adds memory as a native tool type in _format_tools;
+        # other backends need the generic TOOL_MEMORY definition here.
+        if self.config.enable_memory and not self._has_native_memory:
+            tools.append(TOOL_MEMORY)
+        tools.append(TOOL_CONTINUE)
         return tools
 
-    async def generate(self, request: GenerationRequest) -> str:
+    async def generate(
+        self, request: GenerationRequest
+    ) -> AsyncGenerator[str, None]:
+        """Generate response text, yielding each message as it's ready.
+
+        The continue tool allows the LLM to send multiple messages.  Each
+        ``yield`` represents one discrete message to deliver.
+        """
         messages: list[dict[str, str]] = list(request.context)
 
         if request.prompt:
@@ -117,19 +138,15 @@ class Backend(ABC):
             messages.append({"role": "user", "content": SPONTANEOUS_PROMPT})
 
         tools = self._get_active_tools()
-        if tools:
-            return await self._generate_with_tools(
-                request.system_prompt,
-                messages,
-                tools,
-                request.attachments or None,
-                request.channel_id,
-                request.participants,
-            )
-
-        return await self._call_api(
-            request.system_prompt, messages, request.attachments or None
-        )
+        async for text in self._generate_with_tools(
+            request.system_prompt,
+            messages,
+            tools,
+            request.attachments or None,
+            request.channel_id,
+            request.participants,
+        ):
+            yield text
 
     async def _generate_with_tools(
         self,
@@ -139,13 +156,14 @@ class Backend(ABC):
         attachments: list[Attachment] | None,
         channel_id: int,
         participants: dict[int, str],
-    ) -> str:
+    ) -> AsyncGenerator[str, None]:
         from faithful.tools import ToolExecutor
 
         formatted_tools = self._format_tools(tools)
-        executor = ToolExecutor(self.memory_store, channel_id, participants)
+        executor = ToolExecutor(self.memory_base_dir, channel_id, participants)
+        continue_count = 0
 
-        for _ in range(MAX_TOOL_ROUNDS):
+        for _ in range(MAX_TOOL_ROUNDS + MAX_CONTINUES):
             text, tool_calls = await self._call_with_tools(
                 system_prompt, messages, formatted_tools, attachments
             )
@@ -153,15 +171,36 @@ class Backend(ABC):
             attachments = None
 
             if not tool_calls:
-                return (text or "").strip()
+                if text:
+                    yield text.strip()
+                return
 
+            # Separate continue from regular tool calls
+            wants_continue = False
             for call in tool_calls:
-                result = await executor.execute(call.name, call.arguments)
-                log.info("Tool %s(%s) -> %s", call.name, call.arguments, result[:200])
-                messages = self._append_tool_result(messages, call, result)
+                if call.name == "continue":
+                    wants_continue = True
+                    messages = self._append_tool_result(
+                        messages, call, '{"status": "ok"}'
+                    )
+                else:
+                    result = await executor.execute(call.name, call.arguments)
+                    log.info(
+                        "Tool %s(%s) -> %s",
+                        call.name, call.arguments, result[:200],
+                    )
+                    messages = self._append_tool_result(messages, call, result)
 
-        # Exhausted rounds -- do a final call without tools
-        return await self._call_api(system_prompt, messages)
+            if wants_continue and continue_count < MAX_CONTINUES:
+                if text:
+                    yield text.strip()
+                continue_count += 1
+            # Otherwise loop continues to get the LLM's response to tool results
+
+        # Exhausted rounds — do a final call without tools
+        final = await self._call_api(system_prompt, messages)
+        if final:
+            yield final.strip()
 
     def _format_tools(self, tools: list[dict[str, Any]]) -> Any:
         """Convert provider-agnostic tool defs to provider format."""

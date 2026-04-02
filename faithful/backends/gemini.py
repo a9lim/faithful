@@ -35,10 +35,14 @@ class GeminiBackend(Backend):
                 contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
         return contents
 
-    def _search_tools(self) -> list[types.Tool] | None:
-        """Return Google Search grounding tool if enabled."""
+    def _native_server_tools(self) -> list[types.Tool] | None:
+        """Return native Gemini tools enabled by config."""
         if self.config.enable_web_search:
-            return [types.Tool(google_search=types.GoogleSearch())]
+            return [
+                types.Tool(google_search=types.GoogleSearch()),
+                types.Tool(url_context=types.ToolUrlContext()),
+                types.Tool(code_execution=types.ToolCodeExecution),
+            ]
         return None
 
     async def _call_api(
@@ -67,7 +71,7 @@ class GeminiBackend(Backend):
                 system_instruction=system_prompt,
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
-                tools=self._search_tools(),
+                tools=self._native_server_tools(),
             ),
         )
         return (response.text or "").strip()
@@ -83,10 +87,10 @@ class GeminiBackend(Backend):
                 parameters=t["parameters"],
             ))
         all_tools: list[types.Tool] = [types.Tool(function_declarations=declarations)]
-        # Add Google Search grounding alongside function tools
-        search = self._search_tools()
-        if search:
-            all_tools.extend(search)
+        # Add native server tools alongside function tools
+        native = self._native_server_tools()
+        if native:
+            all_tools.extend(native)
         return all_tools
 
     async def _call_with_tools(

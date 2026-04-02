@@ -65,7 +65,6 @@ class Config:
     api_key: str = ""
     model: str = ""
     base_url: str = ""
-    host: str = ""
 
     # LLM
     temperature: float = 1.0
@@ -118,7 +117,6 @@ class Config:
             api_key=os.environ.get("API_KEY", b.get("api_key", "")),
             model=b.get("model", ""),
             base_url=b.get("base_url", ""),
-            host=b.get("host", ""),
 
             temperature=float(llm.get("temperature", 1.0)),
             max_tokens=int(llm.get("max_tokens", 1024)),

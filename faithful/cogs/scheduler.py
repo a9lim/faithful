@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from discord.ext import commands
 
 from faithful.backends.base import GenerationRequest
-from faithful.chunker import send_chunked
-from faithful.prompt import format_memories, format_system_prompt, get_guild_emojis
+from faithful.chunker import send_responses
+from faithful.prompt import format_system_prompt, get_guild_emojis
 
 if TYPE_CHECKING:
     from faithful.bot import Faithful
@@ -109,12 +109,10 @@ class Scheduler(commands.Cog):
         cfg = self.bot.config
         sampled = self.bot.store.get_sampled_messages(cfg.sample_size)
 
-        memories = ""
-        if cfg.enable_memory and self.bot.memory_store is not None:
-            memories = format_memories(self.bot.memory_store, channel_id, {})
-
         system_prompt = format_system_prompt(
-            cfg.system_prompt, cfg.persona_name, sampled, memories, custom_emojis
+            cfg.system_prompt, cfg.persona_name, sampled, custom_emojis,
+            enable_memory=cfg.enable_memory,
+            has_native_memory=getattr(self.bot.backend, '_has_native_memory', False),
         )
 
         request = GenerationRequest(
@@ -125,10 +123,8 @@ class Scheduler(commands.Cog):
         )
 
         try:
-            response = await self.bot.backend.generate(request)
-            if response:
-                await send_chunked(channel, response)  # type: ignore[arg-type]
-                log.info("Sent spontaneous message to #%s.", channel)
+            await send_responses(channel, self.bot.backend.generate(request))  # type: ignore[arg-type]
+            log.info("Sent spontaneous message to #%s.", channel)
         except Exception:
             log.exception("Failed to send spontaneous message")
 

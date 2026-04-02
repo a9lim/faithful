@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from .anthropic import AnthropicBackend
 from .gemini import GeminiBackend
-from .ollama import OllamaBackend
 from .openai import OpenAIBackend
 from .openai_compat import OpenAICompatibleBackend
 
@@ -13,7 +12,6 @@ if TYPE_CHECKING:
     from .base import Backend
 
 _BACKENDS: dict[str, type[Backend]] = {
-    "ollama": OllamaBackend,
     "openai": OpenAIBackend,
     "openai-compatible": OpenAICompatibleBackend,
     "gemini": GeminiBackend,

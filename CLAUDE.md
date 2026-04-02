@@ -29,7 +29,7 @@ Notable config fields:
 - `reaction_probability` (default 0.05) -- chance the bot reacts to a message it doesn't reply to
 - `enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
 
-All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible, `host` for Ollama) are optional. `base_url` is required for the openai-compatible backend.
+All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible) are optional. `base_url` is required for the openai-compatible backend. Local models via Ollama use the openai-compatible backend with `base_url = "http://localhost:11434/v1"`.
 
 ## Architecture
 
@@ -51,7 +51,7 @@ All backends extend the single `Backend` ABC in `backends/base.py`. There is no 
 
 The tool loop lives in `Backend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (memory tools, or DuckDuckGo web search for backends without native search).
 
-Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat.py`, `ollama.py`, `gemini.py`, `anthropic.py`. They are registered in `backends/__init__.py` and instantiated via `get_backend(name, config)`.
+Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat.py`, `gemini.py`, `anthropic.py`. They are registered in `backends/__init__.py` and instantiated via `get_backend(name, config)`. Local models (Ollama, LM Studio, vLLM, etc.) use the openai-compatible backend.
 
 **Shared helpers** in the `Backend` base class:
 - `Attachment.b64` property -- base64-encodes attachment data (used by all backends that handle images)
@@ -60,15 +60,21 @@ Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat
 Each LLM API handles system prompts differently:
 - **OpenAI**: `"developer"` role in input messages (Responses API)
 - **OpenAI-compatible**: `"system"` role prepended to messages (Chat Completions API)
-- **Ollama**: `"system"` role prepended to messages
+
 - **Gemini**: `system_instruction` in `GenerateContentConfig`
 - **Anthropic**: `system=` parameter (separate from messages), plus `_normalize_messages()` to enforce role alternation
 
 ### Tool System
 
-**Web search** uses native server-side tools for OpenAI (`web_search_preview`), Anthropic (`web_search_20250305`), and Gemini (`GoogleSearch` grounding). These are handled by each API automatically -- no tool loop needed. Ollama and openai-compatible fall back to DuckDuckGo via `duckduckgo_search` through the client-side tool loop. Backends with native search set `_has_native_search = True` so `_get_active_tools()` skips the DuckDuckGo tool.
+**Server-side tools (Anthropic):** The Anthropic backend uses native server-side tools: `web_search_20260209`, `web_fetch_20260209`, and `code_execution_20260120`. These run on Anthropic's infrastructure and support `pause_turn` continuation (capped at 10 rounds). The `_native_server_tools()` method returns them when `enable_web_search` is true.
 
-Provider-agnostic tool definitions for memory tools live in `tools.py`: `remember_user` (reverse-lookups user ID from display name), `remember_channel`. `ToolExecutor` dispatches calls and returns JSON results.
+**Server-side tools (OpenAI, Gemini):** OpenAI uses `web_search_preview` and Gemini uses `GoogleSearch` grounding for native web search. Both set `_has_native_server_tools = True` so `_get_active_tools()` skips client-side web tools.
+
+**Client-side web tools:** The openai-compatible backend falls back to DuckDuckGo search and `aiohttp`-based web fetch (`TOOL_WEB_SEARCH`, `TOOL_WEB_FETCH` in `tools.py`) through the client-side tool loop.
+
+**Memory tool:** Uses Anthropic's file-based CRUD model (`memory_20250818`) across all backends. Claude manages plain files in `data/memories/` with commands: `view`, `create`, `str_replace`, `insert`, `delete`, `rename`. The `MemoryExecutor` class in `tools.py` handles execution with path traversal protection. Anthropic gets the native tool type; other backends get `TOOL_MEMORY` as a client-side tool (controlled by `_has_native_memory` flag). For non-Anthropic backends, a memory protocol instruction is injected into the system prompt.
+
+Provider-agnostic tool definitions live in `tools.py`. `ToolExecutor` dispatches calls to `MemoryExecutor`, DuckDuckGo search, or aiohttp web fetch.
 
 ### Reactions
 
@@ -82,7 +88,7 @@ Responses can include `[react: emoji]` markers at the end. The flow:
 
 ### Memory System
 
-`memory.py` provides `MemoryStore` -- JSON file storage in `data/memories/users/{user_id}.json` and `data/memories/channels/{channel_id}.json`. Caps: 20 facts/user, 50 memories/channel (FIFO). Memories are injected into the system prompt via `format_memories()` in `prompt.py`. Admin commands in `/memory` group manage memories manually.
+Plain file storage in `data/memories/`. Claude organizes files however it wants -- no imposed structure. `MemoryExecutor` in `tools.py` executes file CRUD commands matching Anthropic's documented memory tool interface. Path traversal is blocked via `pathlib.Path.resolve()` + `relative_to()`. The directory is created on startup when `enable_memory` is true (`bot.py` sets `backend.memory_base_dir`).
 
 ### Admin Commands
 
@@ -91,16 +97,15 @@ All admin commands use a single permission tier -- any user whose ID is in `admi
 - `/upload`, `/add_message`, `/list_messages`, `/remove_message`, `/clear_messages`, `/download_messages` -- manage the example corpus
 - `/status` -- show current configuration
 - `/generate_test` -- test generation with a prompt
-- `/memory list|add|remove|clear` -- manage memories
 - "Add to Persona" context menu -- right-click a message to add it as an example
 
 ### Key Design Decisions
 
 - **`GenerationRequest`** is a frozen dataclass containing the formatted system prompt, user prompt, conversation context, `channel_id`, `guild_id`, and `participants` dict
-- **`format_system_prompt()`** in `prompt.py` handles template formatting with persona name, examples, memories, and custom emoji via `{custom_emojis}` placeholder
+- **`format_system_prompt()`** in `prompt.py` handles template formatting with persona name, examples, custom emoji, and optional memory protocol injection for non-Anthropic backends
 - **`store.get_sampled_messages()`** uses index-based tracking to avoid duplicates when balancing samples across source files
 - **Scheduler** uses a plain `asyncio.Task` loop with persistent state in `scheduler_state.json`
 - **Debouncing** in chat uses per-channel `asyncio.Task` cancellation
-- **`remember_user`** tool uses display name (not user_id) since the LLM sees names in context, not IDs
+- **`enable_web_search`** controls all server-side tools (search, fetch, code execution) for Anthropic and client-side web tools (DuckDuckGo, aiohttp fetch) for other backends
 - Both `enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
 - Config is read-only at runtime -- no `save()` or `set_*` commands; edit `config.toml` and restart

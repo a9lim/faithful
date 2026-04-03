@@ -110,8 +110,40 @@ class Backend(ABC):
     _has_native_memory: bool = False
     """Subclasses with a native memory tool type set this to True."""
 
+    _sessions: dict[int, SessionHistory]
+
     def __init__(self, config: Config) -> None:
         self.config = config
+        self._sessions = {}
+
+    def _get_session(self, channel_id: int) -> SessionHistory:
+        """Return existing session or create a new one. Expired sessions are reset."""
+        session = self._sessions.get(channel_id)
+        if session is None or session.expired:
+            session = SessionHistory(
+                channel_id=channel_id,
+                max_messages=self.config.max_session_messages,
+                expiry=self.config.conversation_expiry,
+            )
+            self._sessions[channel_id] = session
+        return session
+
+    def _store_tool_round(
+        self,
+        session: SessionHistory,
+        call: ToolCall,
+        result: str,
+    ) -> None:
+        """Append a tool call + result to the session in provider-agnostic format."""
+        session.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": call.id, "name": call.name, "arguments": call.arguments}],
+        })
+        session.append({
+            "role": "tool_results",
+            "results": [{"tool_call_id": call.id, "content": result}],
+        })
 
     async def setup(self, examples: list[str]) -> None:
         """Called when the example corpus changes (or on first load)."""
@@ -158,35 +190,46 @@ class Backend(ABC):
     async def generate(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
-        """Generate response text, yielding each message as it's ready.
+        """Generate response text, yielding each message as it's ready."""
+        session = self._get_session(request.channel_id)
+        session.touch()
 
-        The continue tool allows the LLM to send multiple messages.  Each
-        ``yield`` represents one discrete message to deliver.
-        """
-        messages: list[dict[str, str]] = list(request.context)
+        # Seed from Discord history on cold start; otherwise ignore request.context
+        if not session.messages:
+            session.seed(request.context)
 
+        # Append current user message
         if request.prompt:
-            messages.append({"role": "user", "content": request.prompt})
+            session.append({"role": "user", "content": request.prompt})
         elif request.attachments:
-            messages.append({"role": "user", "content": ""})
+            session.append({"role": "user", "content": ""})
         else:
-            messages.append({"role": "user", "content": SPONTANEOUS_PROMPT})
+            session.append({"role": "user", "content": SPONTANEOUS_PROMPT})
 
         tools = self._get_active_tools()
+        collected_text: list[str] = []
+
         async for text in self._generate_with_tools(
             request.system_prompt,
-            messages,
+            session,
             tools,
             request.attachments or None,
             request.channel_id,
             request.participants,
         ):
+            collected_text.append(text)
             yield text
+
+        # Store final assistant response in session
+        if collected_text:
+            session.append({"role": "assistant", "content": "\n\n".join(collected_text)})
+
+        session.trim()
 
     async def _generate_with_tools(
         self,
         system_prompt: str,
-        messages: list[Any],
+        session: SessionHistory,
         tools: list[dict[str, Any]],
         attachments: list[Attachment] | None,
         channel_id: int,
@@ -197,6 +240,10 @@ class Backend(ABC):
         formatted_tools = self._format_tools(tools)
         executor = ToolExecutor(self.memory_base_dir, channel_id, participants)
         continue_count = 0
+
+        # Build a working copy of messages for the API call.
+        # Provider-specific tool results get appended here during the loop.
+        messages: list[Any] = list(session.messages)
 
         for _ in range(MAX_TOOL_ROUNDS + MAX_CONTINUES):
             text, tool_calls = await self._call_with_tools(
@@ -225,6 +272,8 @@ class Backend(ABC):
                         call.name, call.arguments, result[:200],
                     )
                     messages = self._append_tool_result(messages, call, result)
+                    # Persist tool round in session (provider-agnostic)
+                    self._store_tool_round(session, call, result)
 
             if wants_continue and continue_count < MAX_CONTINUES:
                 if text:

@@ -28,6 +28,8 @@ Environment variables override their TOML equivalents for deployment flexibility
 Notable config fields:
 - `reaction_probability` (default 0.05) -- chance the bot reacts to a message it doesn't reply to
 - `enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
+- `enable_thinking` (default true), `enable_compaction` (default true), `enable_1m_context` (default true) -- Anthropic-specific features; ignored by other backends
+- `max_session_messages` (default 50) -- per-channel session history window (all backends)
 
 All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible) are optional. `base_url` is required for the openai-compatible backend. Local models via Ollama use the openai-compatible backend with `base_url = "http://localhost:11434/v1"`.
 
@@ -39,17 +41,19 @@ Faithful is a Discord bot that emulates a persona by learning from example messa
 
 1. **`cogs/chat.py`** receives a Discord message, decides whether to respond (mention, reply, active conversation, or random chance), and starts a debounced task. If not replying, `_maybe_react()` may trigger a standalone reaction.
 2. **`prompt.py`** assembles a `GenerationRequest` -- slices history from the last @mention, samples examples from the store, injects custom emoji list via `get_guild_emojis()`, and formats the system prompt.
-3. The active **backend** generates a response from the `GenerationRequest`.
-4. **`chunker.py`** calls `extract_reactions()` to strip `[react: emoji]` markers, splits the clean text into Discord-safe chunks (<=2000 chars), sends them with simulated typing delays, and applies extracted reactions to the prompt message.
+3. The active **backend** generates a response from the `GenerationRequest`, using **session history** (per-channel, sliding window with expiry) to maintain context across turns, including tool-call/tool-result pairs.
+4. **`chunker.py`** calls `extract_reactions()` to strip `[react: emoji]` markers, splits clean text into Discord-safe chunks (<=2000 chars) via `_chunk_text()`, sends them via `send_responses()` (first chunk replies to the original message, rest are standalone), and applies extracted reactions to the prompt message.
 
 ### Backend System
 
-All backends extend the single `Backend` ABC in `backends/base.py`. There is no separate `BaseLLMBackend` -- the base class itself provides the tool loop, `generate()`, and helper methods. Subclasses implement `_call_api(system_prompt, messages)` for basic generation, and optionally three tool hooks for tool-use support:
+All backends extend the single `Backend` ABC in `backends/base.py`. There is no separate `BaseLLMBackend` -- the base class itself provides the tool loop, `generate()`, session history management, and helper methods. Subclasses implement `_call_api(system_prompt, messages)` for basic generation, and optionally three tool hooks for tool-use support:
 - `_format_tools(tools)` -- convert provider-agnostic defs to provider format
 - `_call_with_tools(system_prompt, messages, tools, attachments)` -- call API with tools, return `(text, list[ToolCall])`
 - `_append_tool_result(messages, call, result)` -- append tool result in provider format
 
 The tool loop lives in `Backend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (memory tools, or DuckDuckGo web search for backends without native search).
+
+**Session history:** `Backend` maintains a `_sessions: dict[int, SessionHistory]` keyed by channel ID. `SessionHistory` stores messages in a provider-agnostic format (including tool-call/tool-result pairs). On cold start, sessions are seeded from Discord-fetched history; on subsequent turns, the session is the source of truth. Sessions expire after `conversation_expiry` seconds of inactivity and are trimmed to `max_session_messages`. Tool interactions are stored via `_store_tool_round()` in a synthetic format (`tool_calls` key, `tool_results` role) that all backends filter out when building API-specific messages.
 
 Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat.py`, `gemini.py`, `anthropic.py`. They are registered in `backends/__init__.py` and instantiated via `get_backend(name, config)`. Local models (Ollama, LM Studio, vLLM, etc.) use the openai-compatible backend.
 
@@ -62,7 +66,7 @@ Each LLM API handles system prompts differently:
 - **OpenAI-compatible**: `"system"` role prepended to messages (Chat Completions API)
 
 - **Gemini**: `system_instruction` in `GenerateContentConfig`
-- **Anthropic**: `system=` parameter (separate from messages), plus `_normalize_messages()` to enforce role alternation
+- **Anthropic**: `system=` parameter (separate from messages) with `cache_control: ephemeral` for prompt caching, plus `_normalize_messages()` to enforce role alternation. Uses streaming (`beta.messages.stream`), adaptive thinking, context compaction, and beta headers (1M context). All controlled by config flags.
 
 ### Tool System
 
@@ -83,7 +87,7 @@ Responses can include `[react: emoji]` markers at the end. The flow:
 1. The **system prompt** instructs the persona to use `[react: emoji]` markers and lists available custom emoji via the `{custom_emojis}` placeholder.
 2. `get_guild_emojis()` in `prompt.py` builds the custom emoji list from the guild's available emojis.
 3. `extract_reactions()` in `chunker.py` strips markers from the response text and returns them separately.
-4. `send_chunked()` applies the reactions to the prompt message after sending text chunks.
+4. `send_responses()` reply-threads the first chunk to the original message, sends the rest standalone, and applies reactions to the prompt message.
 5. `_maybe_react()` in `cogs/chat.py` independently triggers reactions on messages the bot doesn't reply to, controlled by `reaction_probability`.
 
 ### Memory System

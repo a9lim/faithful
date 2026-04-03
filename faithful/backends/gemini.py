@@ -27,6 +27,9 @@ class GeminiBackend(Backend):
         """Convert messages to Gemini contents format, handling mixed types."""
         contents: list[dict[str, Any]] = []
         for msg in messages:
+            # Skip provider-agnostic tool round entries from session history
+            if msg.get("role") == "tool_results" or "tool_calls" in msg:
+                continue
             if "parts" in msg:
                 # Already in Gemini format
                 contents.append(msg)

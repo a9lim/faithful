@@ -28,7 +28,11 @@ class AnthropicBackend(Backend):
     def _normalize_messages(
         messages: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Ensure strict user/assistant alternation required by the Anthropic API."""
+        """Ensure strict user/assistant alternation required by the Anthropic API.
+
+        Messages with list content (compacted blocks, tool blocks) are passed
+        through unchanged — they must not be string-concatenated.
+        """
         start = 0
         for i, msg in enumerate(messages):
             if msg["role"] != "assistant":
@@ -39,9 +43,15 @@ class AnthropicBackend(Backend):
 
         merged: list[dict[str, Any]] = []
         for msg in messages[start:]:
+            # Skip synthetic tool_results role — handled by _append_tool_result
+            if msg.get("role") == "tool_results":
+                continue
+
             if merged and merged[-1]["role"] == msg["role"]:
                 prev_content = merged[-1]["content"]
-                curr_content = msg["content"]
+                curr_content = msg.get("content", "")
+
+                # Only merge plain strings; lists (compacted/tool blocks) pass through
                 if isinstance(prev_content, str) and isinstance(curr_content, str):
                     merged[-1] = {
                         "role": msg["role"],

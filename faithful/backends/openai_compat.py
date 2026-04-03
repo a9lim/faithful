@@ -39,8 +39,13 @@ class OpenAICompatibleBackend(Backend):
     ) -> list[dict[str, Any]]:
         full: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
-            *messages,
         ]
+        for msg in messages:
+            # Skip provider-agnostic tool round entries from session history
+            if msg.get("role") == "tool_results" or "tool_calls" in msg:
+                continue
+            full.append(msg)
+
         if attachments:
             last = full[-1]
             content: list[dict[str, Any]] = [

@@ -43,8 +43,9 @@ class AnthropicBackend(Backend):
 
         merged: list[dict[str, Any]] = []
         for msg in messages[start:]:
-            # Skip synthetic tool_results role — handled by _append_tool_result
-            if msg.get("role") == "tool_results":
+            # Skip provider-agnostic tool round entries from session history;
+            # the tool loop builds Anthropic-specific format via _append_tool_result
+            if msg.get("role") == "tool_results" or "tool_calls" in msg:
                 continue
 
             if merged and merged[-1]["role"] == msg["role"]:

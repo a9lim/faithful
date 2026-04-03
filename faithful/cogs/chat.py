@@ -73,6 +73,7 @@ class Chat(commands.Cog):
             request = GenerationRequest(
                 prompt=_REACTION_PROMPT.format(message=message.content[:500]),
                 system_prompt=system_prompt,
+                channel_id=message.channel.id,
             )
             parts = [r async for r in self.bot.backend.generate(request)]
             response = " ".join(parts).strip()

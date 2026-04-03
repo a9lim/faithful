@@ -22,13 +22,13 @@ class OpenAICompatibleBackend(Backend):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        if not config.base_url:
+        if not config.backend.base_url:
             raise ValueError(
                 "openai-compatible backend requires 'base_url' in [backend] config"
             )
         self._client = AsyncOpenAI(
-            api_key=config.api_key or "not-needed",
-            base_url=config.base_url,
+            api_key=config.backend.api_key or "not-needed",
+            base_url=config.backend.base_url,
         )
 
     def _build_messages(
@@ -69,10 +69,10 @@ class OpenAICompatibleBackend(Backend):
         full = self._build_messages(system_prompt, messages, attachments)
 
         response = await self._client.chat.completions.create(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             messages=full,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_tokens=self.config.llm.max_tokens,
+            temperature=self.config.llm.temperature,
         )
         return (response.choices[0].message.content or "").strip()
 
@@ -101,11 +101,11 @@ class OpenAICompatibleBackend(Backend):
         full = self._build_messages(system_prompt, messages, attachments)
 
         response = await self._client.chat.completions.create(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             messages=full,
             tools=tools,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_tokens=self.config.llm.max_tokens,
+            temperature=self.config.llm.temperature,
         )
 
         msg = response.choices[0].message

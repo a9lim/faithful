@@ -5,18 +5,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Running the Bot
 
 ```bash
-pip install .                          # install dependencies
+pip install .                          # install core + all backends
+pip install ".[openai]"                # or just one backend
 cp config.example.toml config.toml     # configure (token + admin_ids required)
 python -m faithful                     # run
 ```
 
-For development: `pip install -e .`
+For development: `pip install -e ".[dev]"`
 
-There is no test suite, linter, or CI pipeline configured.
+Backend SDKs are optional — only the active backend's package needs to be installed. Available extras: `openai`, `gemini`, `anthropic`, `all`, `dev`.
+
+## Testing
+
+```bash
+pytest tests/ -v
+```
+
+88 tests covering config, chunker, store, tools (MemoryExecutor), prompt, SessionHistory, and backend loading. No linter or CI pipeline configured.
 
 ## Configuration
 
 Config lives in `config.toml` (TOML format). Configuration is **read-only** -- there is no runtime persistence or `save()` method; all changes require editing the file and restarting.
+
+Config uses **nested dataclasses** (`DiscordConfig`, `BackendConfig`, `LLMConfig`, `BehaviorConfig`, `SchedulerConfig`) loaded via `_merge_dataclass()` which recursively merges TOML dicts into typed defaults, then re-runs `__post_init__()` validation on each section. Access patterns use dot notation: `config.backend.model`, `config.behavior.enable_memory`, `config.llm.max_tokens`, etc.
 
 Environment variables override their TOML equivalents for deployment flexibility:
 - `DISCORD_TOKEN` -- overrides `discord.token`
@@ -26,10 +37,11 @@ Environment variables override their TOML equivalents for deployment flexibility
 `admin_ids` accepts a list of Discord user IDs (multi-admin support). The legacy singular `admin_user_id` key is still read as a fallback.
 
 Notable config fields:
-- `reaction_probability` (default 0.05) -- chance the bot reacts to a message it doesn't reply to
-- `enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
-- `enable_thinking` (default true), `enable_compaction` (default true), `enable_1m_context` (default true) -- Anthropic-specific features; ignored by other backends
-- `max_session_messages` (default 50) -- per-channel session history window (all backends)
+- `[behavior] reaction_probability` (default 0.05) -- chance the bot reacts to a message it doesn't reply to
+- `[behavior] enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
+- `[backend] enable_thinking` (default true), `enable_compaction` (default true), `enable_1m_context` (default true) -- Anthropic-specific features; ignored by other backends
+- `[behavior] max_session_messages` (default 50) -- per-channel session history window (all backends)
+- `[llm] max_tokens` (default 16000) -- max response tokens for all backends
 
 All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible) are optional. `base_url` is required for the openai-compatible backend. Local models via Ollama use the openai-compatible backend with `base_url = "http://localhost:11434/v1"`.
 
@@ -55,7 +67,7 @@ The tool loop lives in `Backend._generate_with_tools()` (max 5 rounds). It's onl
 
 **Session history:** `Backend` maintains a `_sessions: dict[int, SessionHistory]` keyed by channel ID. `SessionHistory` stores messages in a provider-agnostic format (including tool-call/tool-result pairs). On cold start, sessions are seeded from Discord-fetched history; on subsequent turns, the session is the source of truth. Sessions expire after `conversation_expiry` seconds of inactivity and are trimmed to `max_session_messages`. Tool interactions are stored via `_store_tool_round()` in a synthetic format (`tool_calls` key, `tool_results` role) that all backends filter out when building API-specific messages.
 
-Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat.py`, `gemini.py`, `anthropic.py`. They are registered in `backends/__init__.py` and instantiated via `get_backend(name, config)`. Local models (Ollama, LM Studio, vLLM, etc.) use the openai-compatible backend.
+Backend files are named without a `_backend` suffix: `openai.py`, `openai_compat.py`, `gemini.py`, `anthropic.py`. They are **lazily loaded** in `backends/__init__.py` via `importlib.import_module()` -- only the active backend's SDK needs to be installed. `get_backend(name, config)` raises a clear `ImportError` with install instructions if the required package is missing. Local models (Ollama, LM Studio, vLLM, etc.) use the openai-compatible backend.
 
 **Shared helpers** in the `Backend` base class:
 - `Attachment.b64` property -- base64-encodes attachment data (used by all backends that handle images)

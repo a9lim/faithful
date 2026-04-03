@@ -22,7 +22,7 @@ class AnthropicBackend(Backend):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self._client = anthropic.AsyncAnthropic(api_key=config.api_key)
+        self._client = anthropic.AsyncAnthropic(api_key=config.backend.api_key)
 
     @staticmethod
     def _normalize_messages(
@@ -101,7 +101,7 @@ class AnthropicBackend(Backend):
     def _native_server_tools(self) -> list[dict[str, Any]]:
         """Return Anthropic server-side tools enabled by config."""
         tools: list[dict[str, Any]] = []
-        if self.config.enable_web_search:
+        if self.config.behavior.enable_web_search:
             tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 3})
             tools.append({"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 3})
             tools.append({"type": "code_execution_20260120", "name": "code_execution"})
@@ -109,16 +109,16 @@ class AnthropicBackend(Backend):
 
     def _native_memory_tool(self) -> list[dict[str, Any]]:
         """Return the Anthropic memory tool if enabled."""
-        if self.config.enable_memory:
+        if self.config.behavior.enable_memory:
             return [{"type": "memory_20250818", "name": "memory"}]
         return []
 
     def _beta_headers(self) -> list[str]:
         """Build list of Anthropic beta header strings from config."""
         betas: list[str] = []
-        if self.config.enable_1m_context:
+        if self.config.backend.enable_1m_context:
             betas.append("context-1m-2025-08-07")
-        if self.config.enable_compaction:
+        if self.config.backend.enable_compaction:
             betas.append("compact-2026-01-12")
         return betas
 
@@ -130,9 +130,9 @@ class AnthropicBackend(Backend):
     ) -> dict[str, Any]:
         """Build kwargs dict shared by _call_api and _call_with_tools."""
         kwargs: dict[str, Any] = {
-            "model": self.config.model or DEFAULT_MODEL,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature,
+            "model": self.config.backend.model or DEFAULT_MODEL,
+            "max_tokens": self.config.llm.max_tokens,
+            "temperature": self.config.llm.temperature,
             "system": [{
                 "type": "text",
                 "text": system_prompt,
@@ -142,9 +142,9 @@ class AnthropicBackend(Backend):
         }
         if tools:
             kwargs["tools"] = tools
-        if self.config.enable_thinking:
+        if self.config.backend.enable_thinking:
             kwargs["thinking"] = {"type": "adaptive"}
-        if self.config.enable_compaction:
+        if self.config.backend.enable_compaction:
             kwargs["context_management"] = {
                 "edits": [{"type": "compact_20260112"}]
             }

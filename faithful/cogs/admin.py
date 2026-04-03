@@ -20,7 +20,7 @@ log = logging.getLogger("faithful.admin")
 def is_admin():
     async def predicate(interaction: discord.Interaction) -> bool:
         bot: Faithful = interaction.client  # type: ignore[assignment]
-        if interaction.user.id not in bot.config.admin_ids:
+        if interaction.user.id not in bot.config.discord.admin_ids:
             await interaction.response.send_message(
                 "\u26d4 You are not authorised to use this command.", ephemeral=True
             )
@@ -175,21 +175,21 @@ class Admin(commands.Cog):
     async def status(self, interaction: discord.Interaction) -> None:
         cfg = self.bot.config
         lines = [
-            f"**Backend:** `{cfg.active_backend}`",
-            f"**Model:** `{cfg.model or '(default)'}`",
+            f"**Backend:** `{cfg.backend.active}`",
+            f"**Model:** `{cfg.backend.model or '(default)'}`",
             f"**Messages:** {self.bot.store.count}",
-            f"**Persona:** {cfg.persona_name}",
-            f"**Reply probability:** {cfg.reply_probability:.1%}",
-            f"**Reaction probability:** {cfg.reaction_probability:.1%}",
-            f"**Debounce delay:** {cfg.debounce_delay}s",
-            f"**Context limit:** {cfg.max_context_messages}",
-            f"**Sample size:** {cfg.sample_size}",
-            f"**Temperature:** {cfg.temperature}",
-            f"**Max tokens:** {cfg.max_tokens}",
-            f"**Spontaneous channels:** {len(cfg.spontaneous_channels)}",
-            f"**Web search:** {'on' if cfg.enable_web_search else 'off'}",
-            f"**Memory:** {'on' if cfg.enable_memory else 'off'}",
-            f"**Admins:** {len(cfg.admin_ids)}",
+            f"**Persona:** {cfg.behavior.persona_name}",
+            f"**Reply probability:** {cfg.behavior.reply_probability:.1%}",
+            f"**Reaction probability:** {cfg.behavior.reaction_probability:.1%}",
+            f"**Debounce delay:** {cfg.behavior.debounce_delay}s",
+            f"**Context limit:** {cfg.behavior.max_context_messages}",
+            f"**Sample size:** {cfg.llm.sample_size}",
+            f"**Temperature:** {cfg.llm.temperature}",
+            f"**Max tokens:** {cfg.llm.max_tokens}",
+            f"**Spontaneous channels:** {len(cfg.scheduler.channels)}",
+            f"**Web search:** {'on' if cfg.behavior.enable_web_search else 'off'}",
+            f"**Memory:** {'on' if cfg.behavior.enable_memory else 'off'}",
+            f"**Admins:** {len(cfg.discord.admin_ids)}",
         ]
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True
@@ -206,10 +206,10 @@ class Admin(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
-            sampled = self.bot.store.get_sampled_messages(self.bot.config.sample_size)
+            sampled = self.bot.store.get_sampled_messages(self.bot.config.llm.sample_size)
             system_prompt = format_system_prompt(
-                self.bot.config.system_prompt,
-                self.bot.config.persona_name,
+                self.bot.config.behavior.system_prompt,
+                self.bot.config.behavior.persona_name,
                 sampled,
                 custom_emojis="",
             )
@@ -237,7 +237,7 @@ async def add_to_persona(
     interaction: discord.Interaction, message: discord.Message
 ) -> None:
     bot: Faithful = interaction.client  # type: ignore[assignment]
-    if interaction.user.id not in bot.config.admin_ids:
+    if interaction.user.id not in bot.config.discord.admin_ids:
         await interaction.response.send_message(
             "\u26d4 Only administrators can perform this action.", ephemeral=True
         )

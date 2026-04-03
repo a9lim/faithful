@@ -114,7 +114,7 @@ async def build_request(
 
     Returns the request and the prompt message (if any) for error reactions.
     """
-    limit = bot.config.max_context_messages
+    limit = bot.config.behavior.max_context_messages
     history_msgs: list[discord.Message] = []
     async for msg in channel.history(limit=limit):
         history_msgs.append(msg)
@@ -157,7 +157,7 @@ async def build_request(
                 prompt_content += f"\n[Attached file: {att.filename}]"
 
     context = build_context(context_msgs, bot.user)
-    sampled = bot.store.get_sampled_messages(bot.config.sample_size)
+    sampled = bot.store.get_sampled_messages(bot.config.llm.sample_size)
 
     channel_id = 0
     if hasattr(channel, "id"):
@@ -166,11 +166,11 @@ async def build_request(
     custom_emojis = get_guild_emojis(guild)
 
     system_prompt = format_system_prompt(
-        bot.config.system_prompt,
-        bot.config.persona_name,
+        bot.config.behavior.system_prompt,
+        bot.config.behavior.persona_name,
         sampled,
         custom_emojis,
-        enable_memory=bot.config.enable_memory,
+        enable_memory=bot.config.behavior.enable_memory,
         has_native_memory=getattr(bot.backend, '_has_native_memory', False),
     )
 

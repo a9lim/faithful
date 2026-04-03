@@ -102,6 +102,46 @@ class AnthropicBackend(Backend):
             return [{"type": "memory_20250818", "name": "memory"}]
         return []
 
+    def _beta_headers(self) -> list[str]:
+        """Build list of Anthropic beta header strings from config."""
+        betas: list[str] = []
+        if self.config.enable_1m_context:
+            betas.append("context-1m-2025-08-07")
+        if self.config.enable_compaction:
+            betas.append("compact-2026-01-12")
+        return betas
+
+    def _build_kwargs(
+        self,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Build kwargs dict shared by _call_api and _call_with_tools."""
+        kwargs: dict[str, Any] = {
+            "model": self.config.model or DEFAULT_MODEL,
+            "max_tokens": self.config.max_tokens,
+            "temperature": self.config.temperature,
+            "system": [{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        if self.config.enable_thinking:
+            kwargs["thinking"] = {"type": "adaptive"}
+        if self.config.enable_compaction:
+            kwargs["context_management"] = {
+                "edits": [{"type": "compact_20260112"}]
+            }
+        betas = self._beta_headers()
+        if betas:
+            kwargs["betas"] = betas
+        return kwargs
+
     async def _call_api(
         self,
         system_prompt: str,
@@ -112,29 +152,19 @@ class AnthropicBackend(Backend):
         normalized = self._apply_attachments(normalized, attachments)
 
         tools = self._native_server_tools() + self._native_memory_tool()
+        kwargs = self._build_kwargs(system_prompt, normalized, tools or None)
 
-        message = await self._client.messages.create(
-            model=self.config.model or DEFAULT_MODEL,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            system=system_prompt,
-            messages=normalized,
-            **({"tools": tools} if tools else {}),
-        )
+        async with self._client.beta.messages.stream(**kwargs) as stream:
+            message = await stream.get_final_message()
 
         # Handle pause_turn for server-side tool loops
         for _ in range(MAX_PAUSE_TURNS):
             if message.stop_reason != "pause_turn":
                 break
             normalized.append({"role": "assistant", "content": message.content})
-            message = await self._client.messages.create(
-                model=self.config.model or DEFAULT_MODEL,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
-                system=system_prompt,
-                messages=normalized,
-                **({"tools": tools} if tools else {}),
-            )
+            kwargs["messages"] = normalized
+            async with self._client.beta.messages.stream(**kwargs) as stream:
+                message = await stream.get_final_message()
 
         return self._extract_text(message.content)
 
@@ -160,28 +190,19 @@ class AnthropicBackend(Backend):
         normalized = self._normalize_messages(messages)
         normalized = self._apply_attachments(normalized, attachments)
 
-        message = await self._client.messages.create(
-            model=self.config.model or DEFAULT_MODEL,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            system=system_prompt,
-            messages=normalized,
-            tools=tools,
-        )
+        kwargs = self._build_kwargs(system_prompt, normalized, tools)
+
+        async with self._client.beta.messages.stream(**kwargs) as stream:
+            message = await stream.get_final_message()
 
         # Handle pause_turn for server-side tool loops
         for _ in range(MAX_PAUSE_TURNS):
             if message.stop_reason != "pause_turn":
                 break
             normalized.append({"role": "assistant", "content": message.content})
-            message = await self._client.messages.create(
-                model=self.config.model or DEFAULT_MODEL,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
-                system=system_prompt,
-                messages=normalized,
-                tools=tools,
-            )
+            kwargs["messages"] = normalized
+            async with self._client.beta.messages.stream(**kwargs) as stream:
+                message = await stream.get_final_message()
 
         text_out = self._extract_text(message.content) or None
         tool_calls: list[ToolCall] = []

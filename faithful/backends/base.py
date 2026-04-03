@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 from pathlib import Path
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -56,6 +57,40 @@ class GenerationRequest:
     channel_id: int = 0
     guild_id: int = 0
     participants: dict[int, str] = field(default_factory=dict)
+
+
+class SessionHistory:
+    """Per-channel conversation state with sliding window and expiry."""
+
+    __slots__ = ("channel_id", "messages", "last_activity", "max_messages", "_expiry")
+
+    def __init__(self, channel_id: int, max_messages: int, expiry: float) -> None:
+        self.channel_id = channel_id
+        self.messages: list[dict[str, Any]] = []
+        self.last_activity: float = time.monotonic()
+        self.max_messages = max_messages
+        self._expiry = expiry
+
+    @property
+    def expired(self) -> bool:
+        return (time.monotonic() - self.last_activity) > self._expiry
+
+    def touch(self) -> None:
+        """Update last-activity timestamp."""
+        self.last_activity = time.monotonic()
+
+    def append(self, message: dict[str, Any]) -> None:
+        """Add a message to the session."""
+        self.messages.append(message)
+
+    def seed(self, context: list[dict[str, str]]) -> None:
+        """Seed session from Discord-fetched history (cold start)."""
+        self.messages = [dict(m) for m in context]
+
+    def trim(self) -> None:
+        """Trim to max_messages, removing from the front."""
+        if len(self.messages) > self.max_messages:
+            self.messages = self.messages[-self.max_messages:]
 
 
 class Backend(ABC):

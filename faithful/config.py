@@ -65,6 +65,9 @@ class Config:
     api_key: str = ""
     model: str = ""
     base_url: str = ""
+    enable_thinking: bool = True
+    enable_compaction: bool = True
+    enable_1m_context: bool = True
 
     # LLM
     temperature: float = 1.0
@@ -80,6 +83,7 @@ class Config:
     max_context_messages: int = 20
     enable_web_search: bool = False
     enable_memory: bool = False
+    max_session_messages: int = 50
     system_prompt: str = ""
 
     # Scheduler
@@ -117,6 +121,9 @@ class Config:
             api_key=os.environ.get("API_KEY", b.get("api_key", "")),
             model=b.get("model", ""),
             base_url=b.get("base_url", ""),
+            enable_thinking=b.get("enable_thinking", True),
+            enable_compaction=b.get("enable_compaction", True),
+            enable_1m_context=b.get("enable_1m_context", True),
 
             temperature=float(llm.get("temperature", 1.0)),
             max_tokens=int(llm.get("max_tokens", 1024)),
@@ -130,6 +137,7 @@ class Config:
             max_context_messages=int(beh.get("max_context_messages", 20)),
             enable_web_search=beh.get("enable_web_search", False),
             enable_memory=beh.get("enable_memory", False),
+            max_session_messages=int(beh.get("max_session_messages", 50)),
             system_prompt=beh.get("system_prompt", ""),
 
             spontaneous_channels=sch.get("channels", []),
@@ -157,6 +165,7 @@ class Config:
         self.temperature = _clamp(self.temperature, 0, 2, "temperature", 1.0)
         self.sample_size = max(1, self.sample_size)
         self.max_context_messages = max(0, self.max_context_messages)
+        self.max_session_messages = max(1, self.max_session_messages)
         self.max_tokens = max(1, self.max_tokens)
 
         if not self.system_prompt:

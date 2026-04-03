@@ -17,6 +17,11 @@ model = ""
 # base_url = ""                            # Required for openai-compatible (e.g. "http://localhost:1234/v1")
 # For Ollama: base_url = "http://localhost:11434/v1"
 
+# Anthropic-specific features (ignored by other backends)
+# enable_thinking = true      # Adaptive extended thinking
+# enable_compaction = true    # Server-side context compaction
+# enable_1m_context = true    # 1M token context window
+
 [llm]
 temperature = 1.0     # 0.0 to 2.0
 max_tokens = 1024
@@ -31,6 +36,7 @@ conversation_expiry = 300.0   # Seconds before a conversation goes stale
 max_context_messages = 20
 enable_web_search = false     # LLM can search the web
 enable_memory = false         # Per-user and per-channel memory
+# max_session_messages = 50   # Per-channel session history window (all backends)
 
 # Optional: custom system prompt template
 # Available placeholders: {name}, {examples}, {custom_emojis}

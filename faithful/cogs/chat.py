@@ -12,7 +12,7 @@ from discord.ext import commands
 from discord.utils import utcnow
 
 from faithful.backends.base import GenerationRequest
-from faithful.chunker import send_chunked
+from faithful.chunker import send_responses
 from faithful.prompt import build_request, format_system_prompt, get_guild_emojis
 
 if TYPE_CHECKING:
@@ -74,8 +74,8 @@ class Chat(commands.Cog):
                 prompt=_REACTION_PROMPT.format(message=message.content[:500]),
                 system_prompt=system_prompt,
             )
-            response = await self.bot.backend.generate(request)
-            response = response.strip()
+            parts = [r async for r in self.bot.backend.generate(request)]
+            response = " ".join(parts).strip()
 
             if response and response.upper() != "PASS":
                 emoji = response.split()[0]  # Take just the first token
@@ -92,11 +92,27 @@ class Chat(commands.Cog):
                 await asyncio.sleep(self.bot.config.debounce_delay)
 
             request, prompt_msg = await build_request(channel, self.bot, guild)
-            response = await self.bot.backend.generate(request)
+            got_response = False
 
-            if response:
-                await send_chunked(channel, response, react_target=prompt_msg)
-            elif prompt_msg:
+            async def _generate_with_typing():
+                nonlocal got_response
+                gen = self.bot.backend.generate(request).__aiter__()
+                try:
+                    while True:
+                        async with channel.typing():
+                            text = await gen.__anext__()
+                        got_response = True
+                        yield text
+                except StopAsyncIteration:
+                    pass
+
+            await send_responses(
+                channel, _generate_with_typing(),
+                react_target=prompt_msg,
+                reply_to=prompt_msg,
+            )
+
+            if not got_response and prompt_msg:
                 try:
                     await prompt_msg.add_reaction("\u26a0\ufe0f")
                 except discord.DiscordException:

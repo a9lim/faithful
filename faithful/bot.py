@@ -37,8 +37,8 @@ class Faithful(commands.Bot):
 
         self.config = config
         self.store = MessageStore(config)
-        self.backend = get_backend(config.active_backend, config)
-        if config.enable_memory:
+        self.backend = get_backend(config.backend.active, config)
+        if config.behavior.enable_memory:
             memory_dir = config.data_dir / "memories"
             memory_dir.mkdir(parents=True, exist_ok=True)
             self.backend.memory_base_dir = memory_dir

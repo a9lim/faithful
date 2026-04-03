@@ -20,7 +20,7 @@ class OpenAIBackend(Backend):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self._client = AsyncOpenAI(api_key=config.api_key)
+        self._client = AsyncOpenAI(api_key=config.backend.api_key)
 
     def _build_input(
         self,
@@ -61,14 +61,14 @@ class OpenAIBackend(Backend):
         input_messages = self._build_input(system_prompt, messages, attachments)
 
         tools: list[dict[str, Any]] | None = None
-        if self.config.enable_web_search:
+        if self.config.behavior.enable_web_search:
             tools = [{"type": "web_search_preview"}]
 
         response = await self._client.responses.create(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             input=input_messages,
-            max_output_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_output_tokens=self.config.llm.max_tokens,
+            temperature=self.config.llm.temperature,
             **({"tools": tools} if tools else {}),
         )
         return (response.output_text or "").strip()
@@ -80,7 +80,7 @@ class OpenAIBackend(Backend):
             {"type": "function", "name": t["name"], "description": t["description"], "parameters": t["parameters"]}
             for t in tools
         ]
-        if self.config.enable_web_search:
+        if self.config.behavior.enable_web_search:
             formatted.insert(0, {"type": "web_search_preview"})
         return formatted
 
@@ -94,11 +94,11 @@ class OpenAIBackend(Backend):
         input_messages = self._build_input(system_prompt, messages, attachments)
 
         response = await self._client.responses.create(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             input=input_messages,
             tools=tools,
-            max_output_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_output_tokens=self.config.llm.max_tokens,
+            temperature=self.config.llm.temperature,
         )
 
         text = None

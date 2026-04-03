@@ -122,8 +122,8 @@ class Backend(ABC):
         if session is None or session.expired:
             session = SessionHistory(
                 channel_id=channel_id,
-                max_messages=self.config.max_session_messages,
-                expiry=self.config.conversation_expiry,
+                max_messages=self.config.behavior.max_session_messages,
+                expiry=self.config.behavior.conversation_expiry,
             )
             self._sessions[channel_id] = session
         return session
@@ -177,12 +177,12 @@ class Backend(ABC):
         )
 
         tools: list[dict[str, Any]] = []
-        if self.config.enable_web_search and not self._has_native_server_tools:
+        if self.config.behavior.enable_web_search and not self._has_native_server_tools:
             tools.append(TOOL_WEB_SEARCH)
             tools.append(TOOL_WEB_FETCH)
         # Anthropic backend adds memory as a native tool type in _format_tools;
         # other backends need the generic TOOL_MEMORY definition here.
-        if self.config.enable_memory and not self._has_native_memory:
+        if self.config.behavior.enable_memory and not self._has_native_memory:
             tools.append(TOOL_MEMORY)
         tools.append(TOOL_CONTINUE)
         return tools

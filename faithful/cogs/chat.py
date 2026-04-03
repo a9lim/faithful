@@ -35,10 +35,10 @@ class Chat(commands.Cog):
         self._pending: dict[int, asyncio.Task] = {}
 
     def _should_reply_randomly(self) -> bool:
-        return random.random() < self.bot.config.reply_probability
+        return random.random() < self.bot.config.behavior.reply_probability
 
     def _should_react(self) -> bool:
-        return random.random() < self.bot.config.reaction_probability
+        return random.random() < self.bot.config.behavior.reaction_probability
 
     def _is_mentioned(self, message: discord.Message) -> bool:
         if self.bot.user is None:
@@ -49,7 +49,7 @@ class Chat(commands.Cog):
             ref = message.reference.resolved
             if isinstance(ref, discord.Message) and ref.author == self.bot.user:
                 age = (utcnow() - ref.created_at).total_seconds()
-                return age < self.bot.config.conversation_expiry
+                return age < self.bot.config.behavior.conversation_expiry
         return False
 
     async def _maybe_react(self, message: discord.Message) -> None:
@@ -61,12 +61,12 @@ class Chat(commands.Cog):
 
         try:
             sampled = self.bot.store.get_sampled_messages(
-                min(self.bot.config.sample_size, 50)
+                min(self.bot.config.llm.sample_size, 50)
             )
             custom_emojis = get_guild_emojis(message.guild)
             system_prompt = format_system_prompt(
-                self.bot.config.system_prompt,
-                self.bot.config.persona_name,
+                self.bot.config.behavior.system_prompt,
+                self.bot.config.behavior.persona_name,
                 sampled,
                 custom_emojis=custom_emojis,
             )
@@ -90,7 +90,7 @@ class Chat(commands.Cog):
     ) -> None:
         try:
             async with channel.typing():
-                await asyncio.sleep(self.bot.config.debounce_delay)
+                await asyncio.sleep(self.bot.config.behavior.debounce_delay)
 
             request, prompt_msg = await build_request(channel, self.bot, guild)
             got_response = False
@@ -147,7 +147,7 @@ class Chat(commands.Cog):
                 for prev_msg in history[1:]:
                     if prev_msg.author == self.bot.user:
                         age = (utcnow() - prev_msg.created_at).total_seconds()
-                        if age < self.bot.config.conversation_expiry:
+                        if age < self.bot.config.behavior.conversation_expiry:
                             in_conversation = True
                         break
 

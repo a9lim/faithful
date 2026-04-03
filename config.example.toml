@@ -24,7 +24,7 @@ model = ""
 
 [llm]
 temperature = 1.0     # 0.0 to 2.0
-max_tokens = 1024
+max_tokens = 16000
 sample_size = 300     # Example messages to include in system prompt
 
 [behavior]

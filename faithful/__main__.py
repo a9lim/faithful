@@ -11,8 +11,9 @@ def main() -> None:
     )
 
     config = Config.from_file()
+    config.validate()
     bot = Faithful(config)
-    bot.run(config.discord_token, log_handler=None)
+    bot.run(config.discord.token, log_handler=None)
 
 
 if __name__ == "__main__":

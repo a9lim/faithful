@@ -60,8 +60,8 @@ class Scheduler(commands.Cog):
     async def _loop(self) -> None:
         await self.bot.wait_until_ready()
 
-        min_sec = self.bot.config.scheduler_min_hours * 3600
-        max_sec = self.bot.config.scheduler_max_hours * 3600
+        min_sec = self.bot.config.scheduler.min_hours * 3600
+        max_sec = self.bot.config.scheduler.max_hours * 3600
 
         while True:
             try:
@@ -90,7 +90,7 @@ class Scheduler(commands.Cog):
                 await asyncio.sleep(3600)
 
     async def _send_spontaneous(self) -> None:
-        channels = self.bot.config.spontaneous_channels
+        channels = self.bot.config.scheduler.channels
         if not channels:
             return
 
@@ -107,11 +107,11 @@ class Scheduler(commands.Cog):
         custom_emojis = get_guild_emojis(guild)
 
         cfg = self.bot.config
-        sampled = self.bot.store.get_sampled_messages(cfg.sample_size)
+        sampled = self.bot.store.get_sampled_messages(cfg.llm.sample_size)
 
         system_prompt = format_system_prompt(
-            cfg.system_prompt, cfg.persona_name, sampled, custom_emojis,
-            enable_memory=cfg.enable_memory,
+            cfg.behavior.system_prompt, cfg.behavior.persona_name, sampled, custom_emojis,
+            enable_memory=cfg.behavior.enable_memory,
             has_native_memory=getattr(self.bot.backend, '_has_native_memory', False),
         )
 

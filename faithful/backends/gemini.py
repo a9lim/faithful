@@ -20,7 +20,7 @@ class GeminiBackend(Backend):
 
     def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self._client = genai.Client(api_key=config.api_key)
+        self._client = genai.Client(api_key=config.backend.api_key)
 
     @staticmethod
     def _to_contents(messages: list[Any]) -> list[dict[str, Any]]:
@@ -40,7 +40,7 @@ class GeminiBackend(Backend):
 
     def _native_server_tools(self) -> list[types.Tool] | None:
         """Return native Gemini tools enabled by config."""
-        if self.config.enable_web_search:
+        if self.config.behavior.enable_web_search:
             return [
                 types.Tool(google_search=types.GoogleSearch()),
                 types.Tool(url_context=types.ToolUrlContext()),
@@ -68,12 +68,12 @@ class GeminiBackend(Backend):
                 })
 
         response = await self._client.aio.models.generate_content(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
+                temperature=self.config.llm.temperature,
+                max_output_tokens=self.config.llm.max_tokens,
                 tools=self._native_server_tools(),
             ),
         )
@@ -117,12 +117,12 @@ class GeminiBackend(Backend):
                 })
 
         response = await self._client.aio.models.generate_content(
-            model=self.config.model or DEFAULT_MODEL,
+            model=self.config.backend.model or DEFAULT_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_tokens,
+                temperature=self.config.llm.temperature,
+                max_output_tokens=self.config.llm.max_tokens,
                 tools=tools,
             ),
         )

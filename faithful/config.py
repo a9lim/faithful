@@ -4,6 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 try:
     import tomllib
@@ -42,7 +43,7 @@ def _clamp(value: float, lo: float, hi: float, name: str, default: float) -> flo
     return default
 
 
-def _parse_admin_ids(env_val: str | None, toml_val) -> list[int]:
+def _parse_admin_ids(env_val: str | None, toml_val: Any) -> list[int]:
     if env_val:
         return [int(x.strip()) for x in env_val.split(",") if x.strip()]
     if isinstance(toml_val, list):
@@ -52,16 +53,39 @@ def _parse_admin_ids(env_val: str | None, toml_val) -> list[int]:
     return []
 
 
-@dataclass
-class Config:
-    """Bot-wide configuration loaded from config.toml with env var overrides for secrets."""
+def _merge_dataclass(instance: Any, overrides: dict) -> None:
+    """Recursively merge a dict of overrides into a dataclass instance."""
+    for key, value in overrides.items():
+        if not hasattr(instance, key):
+            continue
+        current = getattr(instance, key)
+        if isinstance(value, dict) and hasattr(current, "__dataclass_fields__"):
+            _merge_dataclass(current, value)
+        else:
+            setattr(instance, key, value)
 
-    # Discord
-    discord_token: str = ""
+
+# ── Nested config sections ──────────────────────────────
+
+
+@dataclass
+class DiscordConfig:
+    token: str = ""
     admin_ids: list[int] = field(default_factory=list)
 
-    # Backend
-    active_backend: str = "openai-compatible"
+    def __post_init__(self) -> None:
+        if not self.token:
+            token = os.environ.get("DISCORD_TOKEN", "")
+            if token:
+                self.token = token
+        admin_env = os.environ.get("ADMIN_USER_IDS") or os.environ.get("ADMIN_USER_ID")
+        if admin_env:
+            self.admin_ids = _parse_admin_ids(admin_env, None)
+
+
+@dataclass
+class BackendConfig:
+    active: str = "openai-compatible"
     api_key: str = ""
     model: str = ""
     base_url: str = ""
@@ -69,12 +93,26 @@ class Config:
     enable_compaction: bool = True
     enable_1m_context: bool = True
 
-    # LLM
+    def __post_init__(self) -> None:
+        api_env = os.environ.get("API_KEY", "")
+        if api_env:
+            self.api_key = api_env
+
+
+@dataclass
+class LLMConfig:
     temperature: float = 1.0
-    max_tokens: int = 1024
+    max_tokens: int = 16000
     sample_size: int = 300
 
-    # Behavior
+    def __post_init__(self) -> None:
+        self.temperature = _clamp(self.temperature, 0, 2, "temperature", 1.0)
+        self.sample_size = max(1, self.sample_size)
+        self.max_tokens = max(1, self.max_tokens)
+
+
+@dataclass
+class BehaviorConfig:
     persona_name: str = "faithful"
     reply_probability: float = 0.02
     reaction_probability: float = 0.05
@@ -86,87 +124,114 @@ class Config:
     max_session_messages: int = 50
     system_prompt: str = ""
 
-    # Scheduler
-    spontaneous_channels: list[int] = field(default_factory=list)
-    scheduler_min_hours: float = 12.0
-    scheduler_max_hours: float = 24.0
+    def __post_init__(self) -> None:
+        self.debounce_delay = _clamp(self.debounce_delay, 0, 60, "debounce_delay", 3.0)
+        self.reply_probability = _clamp(self.reply_probability, 0, 1, "reply_probability", 0.02)
+        self.reaction_probability = _clamp(self.reaction_probability, 0, 1, "reaction_probability", 0.05)
+        self.max_context_messages = max(0, self.max_context_messages)
+        self.max_session_messages = max(1, self.max_session_messages)
+        if not self.system_prompt:
+            self.system_prompt = DEFAULT_SYSTEM_PROMPT
 
-    # Paths
+
+@dataclass
+class SchedulerConfig:
+    channels: list[int] = field(default_factory=list)
+    min_hours: float = 12.0
+    max_hours: float = 24.0
+
+
+@dataclass
+class Config:
+    """Bot-wide configuration loaded from config.toml with env var overrides for secrets."""
+
+    discord: DiscordConfig = field(default_factory=DiscordConfig)
+    backend: BackendConfig = field(default_factory=BackendConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    behavior: BehaviorConfig = field(default_factory=BehaviorConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+
     data_dir: Path = field(
         default_factory=lambda: Path(__file__).resolve().parent.parent / "data"
     )
 
     @classmethod
     def from_file(cls, path: Path | None = None) -> Config:
-        """Load configuration from a TOML file. Environment variables
-        override ``discord.token`` (``DISCORD_TOKEN``), ``discord.admin_ids``
-        (``ADMIN_USER_IDS`` or ``ADMIN_USER_ID``), and ``backend.api_key`` (``API_KEY``)."""
+        """Load configuration from a TOML file, merging over defaults.
+
+        Environment variables override ``discord.token`` (``DISCORD_TOKEN``),
+        ``discord.admin_ids`` (``ADMIN_USER_IDS`` or ``ADMIN_USER_ID``),
+        and ``backend.api_key`` (``API_KEY``).
+        """
         config_path = path or _CONFIG_PATH
         raw = _load_toml(config_path)
 
-        d = raw.get("discord", {})
-        b = raw.get("backend", {})
-        llm = raw.get("llm", {})
-        beh = raw.get("behavior", {})
-        sch = raw.get("scheduler", {})
+        # Handle legacy flat keys by mapping them into nested dicts
+        raw = _migrate_legacy_keys(raw)
 
-        return cls(
-            discord_token=os.environ.get("DISCORD_TOKEN", d.get("token", "")),
-            admin_ids=_parse_admin_ids(
-                os.environ.get("ADMIN_USER_IDS") or os.environ.get("ADMIN_USER_ID"),
-                d.get("admin_ids", d.get("admin_user_id", 0)),
-            ),
+        config = cls()
+        _merge_dataclass(config, raw)
 
-            active_backend=b.get("active", "openai-compatible"),
-            api_key=os.environ.get("API_KEY", b.get("api_key", "")),
-            model=b.get("model", ""),
-            base_url=b.get("base_url", ""),
-            enable_thinking=b.get("enable_thinking", True),
-            enable_compaction=b.get("enable_compaction", True),
-            enable_1m_context=b.get("enable_1m_context", True),
+        # Re-run validation after merge (setattr bypasses __post_init__)
+        config.discord.__post_init__()
+        config.backend.__post_init__()
+        config.llm.__post_init__()
+        config.behavior.__post_init__()
 
-            temperature=float(llm.get("temperature", 1.0)),
-            max_tokens=int(llm.get("max_tokens", 1024)),
-            sample_size=int(llm.get("sample_size", 300)),
-
-            persona_name=beh.get("persona_name", "faithful"),
-            reply_probability=float(beh.get("reply_probability", 0.02)),
-            reaction_probability=float(beh.get("reaction_probability", 0.05)),
-            debounce_delay=float(beh.get("debounce_delay", 3.0)),
-            conversation_expiry=float(beh.get("conversation_expiry", 300.0)),
-            max_context_messages=int(beh.get("max_context_messages", 20)),
-            enable_web_search=beh.get("enable_web_search", False),
-            enable_memory=beh.get("enable_memory", False),
-            max_session_messages=int(beh.get("max_session_messages", 50)),
-            system_prompt=beh.get("system_prompt", ""),
-
-            spontaneous_channels=sch.get("channels", []),
-            scheduler_min_hours=float(sch.get("min_hours", 12)),
-            scheduler_max_hours=float(sch.get("max_hours", 24)),
-
-            data_dir=Path(__file__).resolve().parent.parent / "data",
-        )
+        return config
 
     def __post_init__(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        if not self.discord_token:
+    def validate(self) -> None:
+        """Validate that required fields are present. Call after from_file()."""
+        if not self.discord.token:
             raise ValueError(
                 "Discord token required: set discord.token in config.toml or DISCORD_TOKEN env var"
             )
-        if not self.admin_ids:
+        if not self.discord.admin_ids:
             raise ValueError(
                 "Admin IDs required: set discord.admin_ids in config.toml or ADMIN_USER_IDS env var"
             )
 
-        self.debounce_delay = _clamp(self.debounce_delay, 0, 60, "debounce_delay", 3.0)
-        self.reply_probability = _clamp(self.reply_probability, 0, 1, "reply_probability", 0.02)
-        self.reaction_probability = _clamp(self.reaction_probability, 0, 1, "reaction_probability", 0.05)
-        self.temperature = _clamp(self.temperature, 0, 2, "temperature", 1.0)
-        self.sample_size = max(1, self.sample_size)
-        self.max_context_messages = max(0, self.max_context_messages)
-        self.max_session_messages = max(1, self.max_session_messages)
-        self.max_tokens = max(1, self.max_tokens)
 
-        if not self.system_prompt:
-            self.system_prompt = DEFAULT_SYSTEM_PROMPT
+def _migrate_legacy_keys(raw: dict) -> dict:
+    """Map legacy TOML structure to the new nested format.
+
+    Handles the old flat-ish layout where [backend] held api_key/model/base_url
+    and [llm] held temperature/max_tokens/sample_size separately.
+    """
+    out = dict(raw)
+
+    # [discord] — admin_user_id fallback
+    d = out.get("discord", {})
+    if "admin_user_id" in d and "admin_ids" not in d:
+        val = d.pop("admin_user_id")
+        if isinstance(val, int) and val:
+            d["admin_ids"] = [val]
+
+    # Apply env overrides into the discord dict
+    env_token = os.environ.get("DISCORD_TOKEN")
+    if env_token:
+        d.setdefault("token", "")
+        d["token"] = env_token
+    admin_env = os.environ.get("ADMIN_USER_IDS") or os.environ.get("ADMIN_USER_ID")
+    if admin_env:
+        d["admin_ids"] = _parse_admin_ids(admin_env, None)
+    if d:
+        out["discord"] = d
+
+    # [backend] stays as-is (active, api_key, model, base_url, enable_*)
+    b = out.get("backend", {})
+    env_api = os.environ.get("API_KEY")
+    if env_api:
+        b["api_key"] = env_api
+    if b:
+        out["backend"] = b
+
+    # [llm] stays as-is (temperature, max_tokens, sample_size)
+
+    # [behavior] stays as-is
+
+    # [scheduler] — map legacy 'channels' key
+    return out

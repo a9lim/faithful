@@ -47,7 +47,7 @@ class OpenAIBackend(Backend):
                 b64 = att.b64
                 content.append({
                     "type": "input_image",
-                    "image_url": f"data:{att.content_type};base64,{b64}",
+                    "image_url": f"data:{att.media_type};base64,{b64}",
                 })
             input_messages[-1] = {"role": last["role"], "content": content}
         return input_messages

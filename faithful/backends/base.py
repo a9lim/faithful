@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -21,7 +22,17 @@ SPONTANEOUS_PROMPT = (
 )
 
 MAX_TOOL_ROUNDS = 5
-MAX_CONTINUES = 5
+
+
+def _detect_media_type(data: bytes) -> str:
+    """Detect image media type from magic bytes. Defaults to image/png."""
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if data[:4] == b"GIF8":
+        return "image/gif"
+    if data[:4] == b"RIFF" and len(data) > 11 and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
 
 
 @dataclass(frozen=True)
@@ -35,6 +46,11 @@ class Attachment:
     @property
     def b64(self) -> str:
         return base64.b64encode(self.data).decode()
+
+    @property
+    def media_type(self) -> str:
+        """Detect media type from magic bytes instead of trusting content_type."""
+        return _detect_media_type(self.data)
 
 
 @dataclass
@@ -115,6 +131,9 @@ class Backend(ABC):
     def __init__(self, config: Config) -> None:
         self.config = config
         self._sessions = {}
+        self._lock = asyncio.Lock()
+        self.total_input_tokens: int = 0
+        self.total_output_tokens: int = 0
 
     def _get_session(self, channel_id: int) -> SessionHistory:
         """Return existing session or create a new one. Expired sessions are reset."""
@@ -187,44 +206,56 @@ class Backend(ABC):
         tools.append(TOOL_CONTINUE)
         return tools
 
+    def _track_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """Accumulate token usage and log expensive turns."""
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        if input_tokens + output_tokens > 5000:
+            log.info(
+                "Expensive turn: %d in / %d out (cumulative: %d in / %d out)",
+                input_tokens, output_tokens,
+                self.total_input_tokens, self.total_output_tokens,
+            )
+
     async def generate(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
         """Generate response text, yielding each message as it's ready."""
-        session = self._get_session(request.channel_id)
-        session.touch()
+        async with self._lock:
+            session = self._get_session(request.channel_id)
+            session.touch()
 
-        # Seed from Discord history on cold start; otherwise ignore request.context
-        if not session.messages:
-            session.seed(request.context)
+            # Seed from Discord history on cold start; otherwise ignore request.context
+            if not session.messages:
+                session.seed(request.context)
 
-        # Append current user message
-        if request.prompt:
-            session.append({"role": "user", "content": request.prompt})
-        elif request.attachments:
-            session.append({"role": "user", "content": ""})
-        else:
-            session.append({"role": "user", "content": SPONTANEOUS_PROMPT})
+            # Append current user message
+            if request.prompt:
+                session.append({"role": "user", "content": request.prompt})
+            elif request.attachments:
+                session.append({"role": "user", "content": ""})
+            else:
+                session.append({"role": "user", "content": SPONTANEOUS_PROMPT})
 
-        tools = self._get_active_tools()
-        collected_text: list[str] = []
+            tools = self._get_active_tools()
+            collected_text: list[str] = []
 
-        async for text in self._generate_with_tools(
-            request.system_prompt,
-            session,
-            tools,
-            request.attachments or None,
-            request.channel_id,
-            request.participants,
-        ):
-            collected_text.append(text)
-            yield text
+            async for text in self._generate_with_tools(
+                request.system_prompt,
+                session,
+                tools,
+                request.attachments or None,
+                request.channel_id,
+                request.participants,
+            ):
+                collected_text.append(text)
+                yield text
 
-        # Store final assistant response in session
-        if collected_text:
-            session.append({"role": "assistant", "content": "\n\n".join(collected_text)})
+            # Store final assistant response in session
+            if collected_text:
+                session.append({"role": "assistant", "content": "\n\n".join(collected_text)})
 
-        session.trim()
+            session.trim()
 
     async def _generate_with_tools(
         self,
@@ -240,12 +271,13 @@ class Backend(ABC):
         formatted_tools = self._format_tools(tools)
         executor = ToolExecutor(self.memory_base_dir, channel_id, participants)
         continue_count = 0
+        max_continues = self.config.behavior.max_continues
 
         # Build a working copy of messages for the API call.
         # Provider-specific tool results get appended here during the loop.
         messages: list[Any] = list(session.messages)
 
-        for _ in range(MAX_TOOL_ROUNDS + MAX_CONTINUES):
+        for _ in range(MAX_TOOL_ROUNDS + max_continues):
             text, tool_calls = await self._call_with_tools(
                 system_prompt, messages, formatted_tools, attachments
             )
@@ -275,7 +307,7 @@ class Backend(ABC):
                     # Persist tool round in session (provider-agnostic)
                     self._store_tool_round(session, call, result)
 
-            if wants_continue and continue_count < MAX_CONTINUES:
+            if wants_continue and continue_count < max_continues:
                 if text:
                     yield text.strip()
                 continue_count += 1

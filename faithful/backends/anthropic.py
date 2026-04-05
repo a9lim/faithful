@@ -74,6 +74,15 @@ class AnthropicBackend(Backend):
                 parts.append(block.text)
         return "\n".join(parts).strip()
 
+    def _track_message_usage(self, message: Any) -> None:
+        """Extract and track token usage from an Anthropic response."""
+        usage = getattr(message, "usage", None)
+        if usage:
+            self._track_usage(
+                getattr(usage, "input_tokens", 0),
+                getattr(usage, "output_tokens", 0),
+            )
+
     def _apply_attachments(
         self,
         normalized: list[dict[str, Any]],
@@ -90,7 +99,7 @@ class AnthropicBackend(Backend):
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": att.content_type,
+                    "media_type": att.media_type,
                     "data": b64,
                 },
             })
@@ -167,6 +176,7 @@ class AnthropicBackend(Backend):
 
         async with self._client.beta.messages.stream(**kwargs) as stream:
             message = await stream.get_final_message()
+        self._track_message_usage(message)
 
         # Handle pause_turn for server-side tool loops
         for _ in range(MAX_PAUSE_TURNS):
@@ -176,6 +186,7 @@ class AnthropicBackend(Backend):
             kwargs["messages"] = normalized
             async with self._client.beta.messages.stream(**kwargs) as stream:
                 message = await stream.get_final_message()
+            self._track_message_usage(message)
 
         return self._extract_text(message.content)
 
@@ -205,6 +216,7 @@ class AnthropicBackend(Backend):
 
         async with self._client.beta.messages.stream(**kwargs) as stream:
             message = await stream.get_final_message()
+        self._track_message_usage(message)
 
         # Handle pause_turn for server-side tool loops
         for _ in range(MAX_PAUSE_TURNS):
@@ -214,6 +226,7 @@ class AnthropicBackend(Backend):
             kwargs["messages"] = normalized
             async with self._client.beta.messages.stream(**kwargs) as stream:
                 message = await stream.get_final_message()
+            self._track_message_usage(message)
 
         text_out = self._extract_text(message.content) or None
         tool_calls: list[ToolCall] = []

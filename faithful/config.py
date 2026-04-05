@@ -122,6 +122,7 @@ class BehaviorConfig:
     enable_web_search: bool = False
     enable_memory: bool = False
     max_session_messages: int = 50
+    max_continues: int = 5
     system_prompt: str = ""
 
     def __post_init__(self) -> None:
@@ -130,6 +131,7 @@ class BehaviorConfig:
         self.reaction_probability = _clamp(self.reaction_probability, 0, 1, "reaction_probability", 0.05)
         self.max_context_messages = max(0, self.max_context_messages)
         self.max_session_messages = max(1, self.max_session_messages)
+        self.max_continues = max(0, self.max_continues)
         if not self.system_prompt:
             self.system_prompt = DEFAULT_SYSTEM_PROMPT
 
@@ -192,6 +194,12 @@ class Config:
         if not self.discord.admin_ids:
             raise ValueError(
                 "Admin IDs required: set discord.admin_ids in config.toml or ADMIN_USER_IDS env var"
+            )
+        # Backends other than openai-compatible require an API key
+        if self.backend.active != "openai-compatible" and not self.backend.api_key:
+            raise ValueError(
+                f"API key required for '{self.backend.active}' backend: "
+                "set backend.api_key in config.toml or API_KEY env var"
             )
 
 

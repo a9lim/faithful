@@ -1,119 +1,15 @@
-"""Provider-agnostic tool definitions and executor."""
+"""Memory file executor — CRUD operations on data/memories/."""
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from faithful.backends.base import ToolCall as ToolCall  # noqa: F401
-
 log = logging.getLogger("faithful.tools")
 
-
-# ── Provider-agnostic tool definitions ───────────────────
-
-TOOL_WEB_SEARCH: dict[str, Any] = {
-    "name": "web_search",
-    "description": "Search the web for current information. Use when the conversation requires recent or factual information you're unsure about.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The search query.",
-            },
-        },
-        "required": ["query"],
-    },
-}
-
-TOOL_WEB_FETCH: dict[str, Any] = {
-    "name": "web_fetch",
-    "description": "Fetch the full text content of a web page at the given URL.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "description": "The URL to fetch.",
-            },
-        },
-        "required": ["url"],
-    },
-}
-
-TOOL_MEMORY: dict[str, Any] = {
-    "name": "memory",
-    "description": "Manage persistent memory files. Use to store and retrieve information across conversations.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "enum": ["view", "create", "str_replace", "insert", "delete", "rename"],
-                "description": "The memory operation to perform.",
-            },
-            "path": {
-                "type": "string",
-                "description": "File or directory path (e.g. /memories or /memories/notes.txt).",
-            },
-            "file_text": {
-                "type": "string",
-                "description": "Content for the 'create' command.",
-            },
-            "old_str": {
-                "type": "string",
-                "description": "Text to find for 'str_replace'.",
-            },
-            "new_str": {
-                "type": "string",
-                "description": "Replacement text for 'str_replace'.",
-            },
-            "insert_line": {
-                "type": "integer",
-                "description": "Line number for 'insert' (0-indexed insertion point).",
-            },
-            "insert_text": {
-                "type": "string",
-                "description": "Text to insert for 'insert'.",
-            },
-            "view_range": {
-                "type": "array",
-                "items": {"type": "integer"},
-                "description": "Optional [start, end] line range for 'view'.",
-            },
-            "old_path": {
-                "type": "string",
-                "description": "Source path for 'rename'.",
-            },
-            "new_path": {
-                "type": "string",
-                "description": "Destination path for 'rename'.",
-            },
-        },
-        "required": ["command"],
-    },
-}
-
-TOOL_CONTINUE: dict[str, Any] = {
-    "name": "continue",
-    "description": (
-        "Signal that you want to send another follow-up message. Call this when "
-        "you have more to say — your current text will be sent immediately, then "
-        "you get another turn to speak. Do NOT use this if you're done talking."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {},
-    },
-}
-
-
-# ── Memory executor ──────────────────────────────────────
 
 class MemoryExecutor:
     """Executes memory tool commands against a local file directory.
@@ -136,6 +32,7 @@ class MemoryExecutor:
         if stripped.startswith("/memories"):
             stripped = stripped[len("/memories"):]
         stripped = stripped.lstrip("/")
+        # Resolve symlinks and normalize before containment check
         resolved = (self._base / stripped).resolve()
         # Ensure it's still within base
         try:
@@ -333,94 +230,3 @@ class MemoryExecutor:
         new_resolved.parent.mkdir(parents=True, exist_ok=True)
         old_resolved.rename(new_resolved)
         return f"Successfully renamed {old_path_str} to {new_path_str}"
-
-
-# ── Tool executor ────────────────────────────────────────
-
-class ToolExecutor:
-    """Executes tool calls, dispatching to the appropriate implementation."""
-
-    def __init__(
-        self,
-        memory_base_dir: Path | None,
-        channel_id: int,
-        participants: dict[int, str],
-    ) -> None:
-        self.channel_id = channel_id
-        self.participants = participants
-        self._memory = MemoryExecutor(memory_base_dir) if memory_base_dir else None
-
-    async def execute(self, name: str, args: dict[str, Any]) -> str:
-        """Execute a tool by name and return the result as a string."""
-        try:
-            if name == "web_search":
-                return await self._web_search(args.get("query", ""))
-            elif name == "web_fetch":
-                return await self._web_fetch(args.get("url", ""))
-            elif name == "memory":
-                return self._memory_dispatch(args)
-            else:
-                return json.dumps({"error": f"Unknown tool: {name}"})
-        except Exception as e:
-            log.exception("Tool '%s' failed.", name)
-            return json.dumps({"error": str(e)})
-
-    async def _web_search(self, query: str) -> str:
-        if not query:
-            return json.dumps({"error": "Empty search query."})
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            return json.dumps({"error": "Web search unavailable (duckduckgo-search not installed)."})
-
-        import asyncio
-        import functools
-
-        try:
-            loop = asyncio.get_running_loop()
-            results = await loop.run_in_executor(
-                None, functools.partial(DDGS().text, query, max_results=5)
-            )
-            if not results:
-                return json.dumps({"results": [], "note": "No results found."})
-            formatted = [
-                {"title": r.get("title", ""), "body": r.get("body", ""), "url": r.get("href", "")}
-                for r in results
-            ]
-            return json.dumps({"results": formatted})
-        except Exception as e:
-            return json.dumps({"error": f"Search failed: {e}"})
-
-    async def _web_fetch(self, url: str) -> str:
-        if not url:
-            return json.dumps({"error": "Empty URL."})
-
-        import aiohttp
-        from bs4 import BeautifulSoup
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        return json.dumps({"error": f"HTTP {resp.status} for {url}"})
-                    content_type = resp.content_type or ""
-                    if "html" in content_type or "text" in content_type:
-                        raw = await resp.text(errors="replace")
-                        if "html" in content_type:
-                            soup = BeautifulSoup(raw, "html.parser")
-                            text = soup.get_text(separator="\n", strip=True)
-                        else:
-                            text = raw
-                        # Truncate to ~50k chars
-                        if len(text) > 50_000:
-                            text = text[:50_000] + "\n\n[Content truncated]"
-                        return json.dumps({"url": url, "content": text})
-                    else:
-                        return json.dumps({"error": f"Unsupported content type: {content_type}"})
-        except Exception as e:
-            return json.dumps({"error": f"Fetch failed: {e}"})
-
-    def _memory_dispatch(self, args: dict[str, Any]) -> str:
-        if self._memory is None:
-            return "Error: Memory is not enabled."
-        return self._memory.execute(args)

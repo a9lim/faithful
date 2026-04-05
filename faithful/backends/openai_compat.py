@@ -55,7 +55,7 @@ class OpenAICompatibleBackend(Backend):
                 b64 = att.b64
                 content.append({
                     "type": "image_url",
-                    "image_url": {"url": f"data:{att.content_type};base64,{b64}"},
+                    "image_url": {"url": f"data:{att.media_type};base64,{b64}"},
                 })
             full[-1] = {"role": last["role"], "content": content}
         return full

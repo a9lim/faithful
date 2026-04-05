@@ -134,6 +134,14 @@ class TestBehaviorConfig:
         c = BehaviorConfig(system_prompt="custom {name}")
         assert c.system_prompt == "custom {name}"
 
+    def test_max_continues_default(self):
+        c = BehaviorConfig()
+        assert c.max_continues == 5
+
+    def test_max_continues_clamped(self):
+        c = BehaviorConfig(max_continues=-1)
+        assert c.max_continues == 0
+
 
 # ── Config.from_file ────────────────────────────────────
 
@@ -192,6 +200,35 @@ class TestConfigFromFile:
         cfg = Config.from_file(toml)
         with pytest.raises(ValueError, match="Admin IDs required"):
             cfg.validate()
+
+    def test_validate_missing_api_key(self, tmp_path: Path):
+        toml = tmp_path / "config.toml"
+        toml.write_text(textwrap.dedent("""\
+            [discord]
+            token = "tok"
+            admin_ids = [1]
+
+            [backend]
+            active = "anthropic"
+        """))
+        cfg = Config.from_file(toml)
+        with pytest.raises(ValueError, match="API key required"):
+            cfg.validate()
+
+    def test_validate_api_key_not_required_for_openai_compat(self, tmp_path: Path):
+        toml = tmp_path / "config.toml"
+        toml.write_text(textwrap.dedent("""\
+            [discord]
+            token = "tok"
+            admin_ids = [1]
+
+            [backend]
+            active = "openai-compatible"
+            base_url = "http://localhost:11434/v1"
+        """))
+        cfg = Config.from_file(toml)
+        # Should not raise — openai-compatible doesn't need an API key
+        cfg.validate()
 
     def test_revalidation_after_merge(self, tmp_path: Path):
         """Validation re-runs __post_init__ so out-of-range values get clamped."""

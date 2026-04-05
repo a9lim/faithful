@@ -62,7 +62,7 @@ class GeminiBackend(Backend):
                 b64 = att.b64
                 last_parts.append({
                     "inline_data": {
-                        "mime_type": att.content_type,
+                        "mime_type": att.media_type,
                         "data": b64,
                     },
                 })
@@ -111,7 +111,7 @@ class GeminiBackend(Backend):
                 b64 = att.b64
                 last_parts.append({
                     "inline_data": {
-                        "mime_type": att.content_type,
+                        "mime_type": att.media_type,
                         "data": b64,
                     },
                 })

@@ -105,8 +105,11 @@ class Onboarding(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Memory (admin)",
-            value="`/memory list/add/remove/clear`",
+            name="Memory",
+            value=(
+                "When `enable_memory` is on in the config, the bot manages "
+                "per-channel memory automatically — no slash commands needed."
+            ),
             inline=False,
         )
         embed.add_field(

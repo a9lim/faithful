@@ -5,8 +5,13 @@ Pure stdin/stdout. Tested by monkeypatching ``builtins.input`` and
 """
 from __future__ import annotations
 
+import base64
 import getpass
+import os
 from dataclasses import dataclass, field
+from datetime import date
+
+from .paths import ResolvedPaths, ensure_home_exists
 
 BANNER = """
 faithful first-run setup
@@ -195,17 +200,16 @@ def validate_credentials(
         return f"{type(e).__name__}: {e}"
 
 
-import base64
-from datetime import date
-
 # Discord OAuth permissions integer. Bits used:
+#   Add Reactions         (1 <<  6) =     64
 #   View Channel          (1 << 10) =   1024
 #   Send Messages         (1 << 11) =   2048
-#   Add Reactions         (1 <<  6) =     64
+#   Embed Links           (1 << 14) =  16384
+#   Attach Files          (1 << 15) =  32768
 #   Read Message History  (1 << 16) =  65536
 #   Use External Emojis   (1 << 18) = 262144
-# Sum: 330816 (= 0x50C40)
-_INVITE_PERMISSIONS = 330816
+# Sum: 379840 (= 0x5CC40)
+_INVITE_PERMISSIONS = 379840
 
 
 def render_config_toml(state: WizardState) -> str:
@@ -233,11 +237,6 @@ def render_config_toml(state: WizardState) -> str:
 def _escape(value: str) -> str:
     """Escape backslashes and double-quotes for a basic TOML string."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
-import os
-
-from .paths import ResolvedPaths, ensure_home_exists
 
 
 def run_wizard(paths: ResolvedPaths, *, quick: bool, no_validate: bool) -> int:

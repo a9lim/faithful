@@ -190,7 +190,7 @@ def test_build_invite_url_extracts_app_id():
     assert url is not None
     assert f"client_id={app_id}" in url
     assert "scope=bot+applications.commands" in url
-    assert "permissions=330816" in url
+    assert "permissions=379840" in url
 
 
 def test_build_invite_url_returns_none_on_garbage():

@@ -29,7 +29,7 @@ ruff check . --fix    # auto-fix what's fixable
 pytest tests/ -v
 ```
 
-The suite covers config loading, paths, errors, the CLI verbs, the wizard, doctor, onboarding, the chunker, the example store, the memory executor, prompt assembly, session history, and backend loading. There are 162 tests at last count and they all run on CPU; no Discord or LLM provider is contacted.
+All tests run on CPU; no Discord or LLM provider is contacted.
 
 If you add a new backend or a new verb, please add tests in the same style as the existing ones in `tests/`.
 
@@ -42,4 +42,4 @@ If you add a new backend or a new verb, please add tests in the same style as th
 
 ## Questions
 
-Please open an issue or reach out on Discord. For anything security-sensitive, please see [SECURITY.md](SECURITY.md).
+Please open an issue or reach out to me. For anything security-sensitive, please see [SECURITY.md](SECURITY.md).

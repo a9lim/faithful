@@ -59,7 +59,12 @@ def run(paths: ResolvedPaths) -> int:
 
 
 def doctor(paths: ResolvedPaths) -> int:
-    raise FaithfulError("doctor not implemented yet")
+    from .config import Config
+    from .doctor import run_doctor
+
+    cfg = Config.from_file(paths.config_path, data_dir=paths.data_dir)
+    cfg.validate()
+    return run_doctor(cfg)
 
 
 def setup(paths: ResolvedPaths, *, quick: bool = False, no_validate: bool = False) -> int:

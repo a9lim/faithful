@@ -20,3 +20,10 @@ def test_faithful_error_is_an_exception():
 def test_message_round_trips():
     err = FaithfulConfigError("missing token")
     assert str(err) == "missing token"
+
+
+def test_version_is_a_string():
+    import faithful
+
+    assert isinstance(faithful.__version__, str)
+    assert faithful.__version__  # non-empty

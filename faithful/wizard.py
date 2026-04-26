@@ -146,3 +146,50 @@ def prompt_credentials(backend: str) -> tuple[str, str, str]:
         if default_model:
             return api_key, default_model, base_url
         print("Model name is required for this backend.")
+
+
+def validate_credentials(
+    backend: str,
+    api_key: str,
+    model: str,
+    base_url: str,
+) -> str | None:
+    """Fire one cheap call to confirm credentials work. Returns error string or None."""
+    try:
+        if backend == "openai":
+            import openai
+
+            client = openai.OpenAI(api_key=api_key, timeout=5)
+            client.models.list()
+            return None
+
+        if backend == "openai-compatible":
+            if not api_key:
+                return None  # local server with no auth — nothing to test
+            import openai
+
+            client = openai.OpenAI(api_key=api_key, base_url=base_url, timeout=5)
+            client.models.list()
+            return None
+
+        if backend == "anthropic":
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=api_key, timeout=5)
+            client.messages.create(
+                model=model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "."}],
+            )
+            return None
+
+        if backend == "gemini":
+            from google import genai
+
+            client = genai.Client(api_key=api_key)
+            list(client.models.list())
+            return None
+
+        return f"unknown backend: {backend}"
+    except Exception as e:  # noqa: BLE001 — any error becomes a user-visible string
+        return f"{type(e).__name__}: {e}"

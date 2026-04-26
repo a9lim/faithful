@@ -235,6 +235,64 @@ def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+import os
+
+from .paths import ResolvedPaths, ensure_home_exists
+
+
+def run_wizard(paths: ResolvedPaths, *, quick: bool, no_validate: bool) -> int:
+    """Run the full interactive setup. Returns 0 on success."""
+    ensure_home_exists(paths)
+    print_banner()
+
+    state = WizardState()
+    state.token = prompt_token()
+    state.admin_ids = prompt_admin_ids()
+    state.backend = prompt_backend()
+    state.api_key, state.model, state.base_url = prompt_credentials(state.backend)
+
+    if not no_validate:
+        print("\nValidating credentials...")
+        err = validate_credentials(
+            state.backend, state.api_key, state.model, state.base_url
+        )
+        if err is None:
+            print("  ✓ credentials look good")
+        else:
+            print(f"  ✗ {err}")
+            choice = input("\n[r]etry, [s]kip validation, [q]uit? ").strip().lower()
+            if choice.startswith("q"):
+                print("\nAborted. No config written.")
+                return 1
+            if choice.startswith("r"):
+                # Re-prompt credentials only.
+                state.api_key, state.model, state.base_url = prompt_credentials(
+                    state.backend
+                )
+
+    contents = render_config_toml(state)
+
+    # Atomic write with mode 0600.
+    paths.config_path.write_text(contents)
+    os.chmod(paths.config_path, 0o600)
+
+    print(f"\nWrote {paths.config_path}")
+
+    if not quick:
+        url = build_invite_url(state.token)
+        if url is not None:
+            print("\nAdd the bot to a server with this link:")
+            print(f"  {url}")
+        else:
+            print(
+                "\nCouldn't parse the application ID from your token. Visit "
+                "https://discord.com/developers/applications to find it manually."
+            )
+
+    print("\nDone. Run 'faithful run' to start the bot.")
+    return 0
+
+
 def build_invite_url(token: str) -> str | None:
     """Extract the application ID from a Discord token and return an invite URL.
 

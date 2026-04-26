@@ -1,20 +1,4 @@
-import logging
-
-from .bot import Faithful
-from .config import Config
-
-
-def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(name)-12s | %(levelname)-8s | %(message)s",
-    )
-
-    config = Config.from_file()
-    config.validate()
-    bot = Faithful(config)
-    bot.run(config.discord.token, log_handler=None)
-
+from .cli import main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -9,7 +9,7 @@ from typing import Any
 try:
     import tomllib
 except ModuleNotFoundError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found]  # Python < 3.11 fallback
 
 from .errors import FaithfulConfigError
 
@@ -22,7 +22,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "If {name} types in all lowercase, you do too. If {name} is blunt, be blunt.\n"
     "Don't clean up the language, don't add politeness, don't over-explain.\n\n"
     "Keep your messages short and natural like a real Discord user.\n"
-    "Use newlines to break up separate thoughts.\n\n"
+    "If you want to send more than one message, call the `continue` tool: "
+    "your current text gets sent immediately, then you get another turn. "
+    "Newlines inside a single message stay together -- they don't split it.\n\n"
     "You can react to messages by including [react: emoji] at the end of your response.\n"
     "Use standard emoji or any of the server's custom emoji.\n"
     "{custom_emojis}"

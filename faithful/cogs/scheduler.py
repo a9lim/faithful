@@ -52,7 +52,7 @@ class Scheduler(commands.Cog):
             self._task = asyncio.create_task(self._loop())
             log.info("Spontaneous message scheduler started.")
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
         if self._task is not None:
             self._task.cancel()
             self._task = None

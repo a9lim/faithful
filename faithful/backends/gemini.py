@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from google import genai
 from google.genai import types
@@ -39,12 +39,17 @@ class GeminiBackend(Backend):
         return contents
 
     def _native_server_tools(self) -> list[types.Tool] | None:
-        """Return native Gemini tools enabled by config."""
+        """Return native Gemini tools enabled by config.
+
+        Gemini ships three relevant server-side tools: GoogleSearch grounding,
+        UrlContext (lets the model fetch and read specific URLs the user
+        mentions), and ToolCodeExecution (Python sandbox).
+        """
         if self.config.behavior.enable_web_search:
             return [
                 types.Tool(google_search=types.GoogleSearch()),
-                types.Tool(url_context=types.ToolUrlContext()),
-                types.Tool(code_execution=types.ToolCodeExecution),
+                types.Tool(url_context=types.UrlContext()),
+                types.Tool(code_execution=types.ToolCodeExecution()),
             ]
         return None
 
@@ -67,14 +72,16 @@ class GeminiBackend(Backend):
                     },
                 })
 
+        # `contents` and `tools` are unions of TypedDicts/SDK classes; pyright
+        # can't narrow our looser dict-based shapes, so cast at the boundary.
         response = await self._client.aio.models.generate_content(
             model=self.config.backend.model or DEFAULT_MODEL,
-            contents=contents,
+            contents=cast(Any, contents),
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=self.config.llm.temperature,
                 max_output_tokens=self.config.llm.max_tokens,
-                tools=self._native_server_tools(),
+                tools=cast(Any, self._native_server_tools()),
             ),
         )
         return (response.text or "").strip()
@@ -118,24 +125,28 @@ class GeminiBackend(Backend):
 
         response = await self._client.aio.models.generate_content(
             model=self.config.backend.model or DEFAULT_MODEL,
-            contents=contents,
+            contents=cast(Any, contents),
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=self.config.llm.temperature,
                 max_output_tokens=self.config.llm.max_tokens,
-                tools=tools,
+                tools=cast(Any, tools),
             ),
         )
 
-        text_out = None
+        text_out: str | None = None
         tool_calls: list[ToolCall] = []
 
         if response.candidates and response.candidates[0].content:
-            for part in response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts or []:
                 if part.text:
                     text_out = part.text
                 elif part.function_call:
                     fc = part.function_call
+                    if not fc.name:
+                        # Function-call parts without a name are unusable —
+                        # skip rather than crash building a ToolCall.
+                        continue
                     args = dict(fc.args) if fc.args else {}
                     tool_calls.append(ToolCall(
                         id=fc.name,  # Gemini doesn't have separate call IDs

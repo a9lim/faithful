@@ -63,7 +63,7 @@ def _attachment_annotations(msg: discord.Message) -> str:
 
 def build_context(
     history: list[discord.Message],
-    bot_user: discord.User | discord.Member,
+    bot_user: discord.abc.User,
 ) -> list[dict[str, str]]:
     """Convert Discord message history to role/content dicts."""
     context: list[dict[str, str]] = []
@@ -84,7 +84,7 @@ def build_context(
 
 def find_prompt_message(
     history: list[discord.Message],
-    bot_user: discord.User | discord.Member,
+    bot_user: discord.abc.User,
 ) -> discord.Message | None:
     """Find the most recent non-bot message in history."""
     for msg in reversed(history):
@@ -95,7 +95,7 @@ def find_prompt_message(
 
 def slice_from_last_mention(
     history: list[discord.Message],
-    bot_user: discord.User | discord.Member,
+    bot_user: discord.abc.User,
 ) -> list[discord.Message]:
     """Trim history to start from the last direct @mention of the bot."""
     start = 0
@@ -114,21 +114,27 @@ async def build_request(
 
     Returns the request and the prompt message (if any) for error reactions.
     """
+    # build_request is only invoked from message-handling paths that fire
+    # after the bot is logged in, so bot.user is guaranteed populated; the
+    # explicit assert lets type-checkers narrow ClientUser | None to ClientUser.
+    bot_user = bot.user
+    assert bot_user is not None, "build_request called before bot login"
+
     limit = bot.config.behavior.max_context_messages
     history_msgs: list[discord.Message] = []
     async for msg in channel.history(limit=limit):
         history_msgs.append(msg)
     history_msgs.reverse()
 
-    history_msgs = slice_from_last_mention(history_msgs, bot.user)
+    history_msgs = slice_from_last_mention(history_msgs, bot_user)
 
     # Collect participants from history
     participants: dict[int, str] = {}
     for m in history_msgs:
-        if m.author != bot.user and not m.author.bot:
+        if m.author != bot_user and not m.author.bot:
             participants[m.author.id] = m.author.display_name
 
-    prompt_msg = find_prompt_message(history_msgs, bot.user)
+    prompt_msg = find_prompt_message(history_msgs, bot_user)
     prompt_content = prompt_msg.content if prompt_msg else ""
 
     # Build context from everything before the prompt message
@@ -156,7 +162,7 @@ async def build_request(
             else:
                 prompt_content += f"\n[Attached file: {att.filename}]"
 
-    context = build_context(context_msgs, bot.user)
+    context = build_context(context_msgs, bot_user)
     sampled = bot.store.get_sampled_messages(bot.config.llm.sample_size)
 
     channel_id = 0

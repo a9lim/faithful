@@ -61,7 +61,11 @@ class Faithful(commands.Bot):
             log.warning("No example messages found. Use /upload to add some.")
 
     async def on_ready(self) -> None:
-        log.info("Logged in as %s (ID: %s)", self.user, self.user.id)
+        # discord.py types self.user as Optional, but on_ready only fires
+        # after login completes — narrow for type-checkers.
+        user = self.user
+        if user is not None:
+            log.info("Logged in as %s (ID: %s)", user, user.id)
         activity = discord.CustomActivity(name="being me")
         await self.change_presence(activity=activity)
 

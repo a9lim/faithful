@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from openai import AsyncOpenAI
 
@@ -52,6 +52,23 @@ class OpenAIBackend(Backend):
             input_messages[-1] = {"role": last["role"], "content": content}
         return input_messages
 
+    def _native_server_tools(self) -> list[dict[str, Any]]:
+        """Return native OpenAI server-side tools enabled by config.
+
+        ``web_search`` is the current recommended grounding tool and (unlike
+        the legacy ``web_search_preview``) supports domain filters and source
+        annotations. ``code_interpreter`` adds a hosted Python sandbox for
+        parity with Anthropic's ``code_execution`` and Gemini's
+        ``ToolCodeExecution`` -- it doubles as a way for the model to fetch
+        and parse arbitrary URLs that ``web_search`` may not surface.
+        """
+        if not self.config.behavior.enable_web_search:
+            return []
+        return [
+            {"type": "web_search"},
+            {"type": "code_interpreter", "container": {"type": "auto"}},
+        ]
+
     async def _call_api(
         self,
         system_prompt: str,
@@ -59,18 +76,22 @@ class OpenAIBackend(Backend):
         attachments: list[Attachment] | None = None,
     ) -> str:
         input_messages = self._build_input(system_prompt, messages, attachments)
+        tools = self._native_server_tools()
 
-        tools: list[dict[str, Any]] | None = None
-        if self.config.behavior.enable_web_search:
-            tools = [{"type": "web_search_preview"}]
+        # The Responses API expects a tightly-typed ResponseInputParam list
+        # (a union of TypedDicts), but our message dicts are loose at the
+        # boundary. Cast through Any so pyright doesn't flag the runtime-fine
+        # dict shapes; the OpenAI client validates structure server-side.
+        kwargs: dict[str, Any] = {
+            "model": self.config.backend.model or DEFAULT_MODEL,
+            "input": cast(Any, input_messages),
+            "max_output_tokens": self.config.llm.max_tokens,
+            "temperature": self.config.llm.temperature,
+        }
+        if tools:
+            kwargs["tools"] = cast(Any, tools)
 
-        response = await self._client.responses.create(
-            model=self.config.backend.model or DEFAULT_MODEL,
-            input=input_messages,
-            max_output_tokens=self.config.llm.max_tokens,
-            temperature=self.config.llm.temperature,
-            **({"tools": tools} if tools else {}),
-        )
+        response = await self._client.responses.create(**kwargs)
         return (response.output_text or "").strip()
 
     # ── Tool support ─────────────────────────────────────
@@ -80,9 +101,9 @@ class OpenAIBackend(Backend):
             {"type": "function", "name": t["name"], "description": t["description"], "parameters": t["parameters"]}
             for t in tools
         ]
-        if self.config.behavior.enable_web_search:
-            formatted.insert(0, {"type": "web_search_preview"})
-        return formatted
+        # Prepend native server tools (web_search, code_interpreter) so the
+        # model sees them alongside our function tools.
+        return self._native_server_tools() + formatted
 
     async def _call_with_tools(
         self,
@@ -95,24 +116,29 @@ class OpenAIBackend(Backend):
 
         response = await self._client.responses.create(
             model=self.config.backend.model or DEFAULT_MODEL,
-            input=input_messages,
-            tools=tools,
+            input=cast(Any, input_messages),
+            tools=cast(Any, tools),
             max_output_tokens=self.config.llm.max_tokens,
             temperature=self.config.llm.temperature,
         )
 
-        text = None
+        text: str | None = None
         tool_calls: list[ToolCall] = []
 
         for item in response.output:
             if item.type == "message":
                 for part in item.content:
-                    if hasattr(part, "text"):
-                        text = part.text
+                    # part is either ResponseOutputText (has .text) or
+                    # ResponseOutputRefusal (has .refusal). Only output_text
+                    # carries the assistant's spoken response.
+                    if getattr(part, "type", None) == "output_text":
+                        text = getattr(part, "text", None)
             elif item.type == "function_call":
                 args = self._parse_json_args(item.arguments)
                 tool_calls.append(ToolCall(id=item.call_id, name=item.name, arguments=args))
-            # web_search_call is handled server-side — ignore it
+            # Server-side calls (web_search_call, code_interpreter_call, etc.)
+            # are executed by OpenAI's infrastructure — they show up in
+            # response.output but we don't need to act on them.
 
         return text, tool_calls
 

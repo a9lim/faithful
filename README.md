@@ -1,28 +1,26 @@
 # Faithful
 
-Faithful is a Discord bot that reads a corpus of example messages and emulates the author's tone and typing style. It responds when mentioned or replied to, and can optionally chime in on its own.
+Faithful is a Discord bot that reads example messages and mimics the author's tone and typing style. It responds when mentioned or replied to, and can optionally post on its own.
 
 ## Features
 
-- **Message emulation**: learns from example messages you provide
-- **Natural chat flow**: sends separate messages with typing-speed delays and chunking that prefers splitting at punctuation
-- **Swappable backends**: pick one of:
+- **Swappable backends**:
   | Backend | Description | Requirements |
   |---------|-------------|-------------|
-  | `openai-compatible` | Any OpenAI-compatible API via [Chat Completions](https://platform.openai.com/docs/api-reference/chat). Covers local servers like Ollama, LM Studio, and vLLM, plus most cloud providers. (default) | `base_url` (API key optional) |
-  | `openai` | OpenAI cloud via the [Responses API](https://platform.openai.com/docs/api-reference/responses) | API key |
-  | `gemini` | Google [Gemini](https://ai.google.dev/) | API key |
+  | `openai-compatible` | Any OpenAI-compatible API via [Chat Completions](https://platform.openai.com/docs/api-reference/chat). (default) | `base_url` (API key optional) |
+  | `openai` | [OpenAI](https://platform.openai.com/docs/api-reference/responses) | API key |
+  | `gemini` | [Google Gemini](https://ai.google.dev/) | API key |
   | `anthropic` | [Anthropic Claude](https://docs.anthropic.com/) | API key |
-- **Web search**: backends can search the web when they need current information. OpenAI, Gemini, and Anthropic use their providers' native server-side search; the OpenAI-compatible backend falls back to DuckDuckGo (opt-in)
-- **Memory**: remembers facts about users and channels across conversations, injected into the system prompt (opt-in)
-- **Reactions**: reacts to messages with emoji, including server custom emoji, both alongside replies and on its own
-- **Spontaneous messaging**: optionally sends 1-2 unprompted messages per day into a configured channel
-- **Random replies**: configurable chance of replying to any message, even when not pinged
+- **Web search**: optionally searches the web for current information.
+- **Memory**: optionally remembers facts about users and channels across conversations 
+- **Reactions**: optionally reacts to messages with emojis including custom ones
+- **Random posts**: optionally sends a few messages per day into a configured channel
+- **Random replies**: optionally replies to any message in configured channels
 
 ## Prerequisites
 
-- **Python 3.10+**
-- A **Discord bot application** with the **Message Content** privileged intent enabled
+- A **Discord bot** with the **Message Content** privileged intent enabled
+- A LLM provider of your choice
 
 ## Quick Start
 
@@ -34,7 +32,7 @@ faithful run                    # start the bot
 
 The wizard writes `~/.faithful/config.toml`. Run `faithful doctor` any time to check connectivity, or `faithful info` to see where things live.
 
-If you want a slimmer install, the per-backend extras are `[openai]`, `[gemini]`, and `[anthropic]`. The OpenAI-compatible backend uses the `openai` package, so `[openai]` covers both. Override paths with `--config <path>`, `--data-dir <path>`, or set `FAITHFUL_HOME=/some/dir`.
+If you want a slimmer install, the per-backend extras are `[openai]`, `[gemini]`, and `[anthropic]`. The OpenAI-compatible backend uses the `openai` package as well. Override paths with `--config <path>`, `--data-dir <path>`, or set `FAITHFUL_HOME=/some/dir`.
 
 ## Commands
 
@@ -59,37 +57,12 @@ You can also right-click any message and use the **Add to Persona** context menu
 
 ## How It Works
 
-### Responding to messages
-
-The bot responds when mentioned or replied to. To keep conversations from feeling disjointed, it ignores replies to messages older than 5 minutes (configurable).
-
-### Message processing
-
-- **Debounce**: when you send a message, the bot waits for you to finish typing multiple messages
-- **Chunking**: responses are split by newlines, and long sentences are further split at sentence-ending punctuation (`.`, `!`, `?`) to stay under Discord's 2000-char limit
-- **Natural delay**: simulates typing based on the length of each chunk
-
-### Reactions
-
+The bot responds when pinged or in chat, ignoring replies to messages older than 5 minutes (configurable).
 The bot can react to messages with emoji, including server custom emoji. Reactions happen in two ways:
-
-- **With replies**: the LLM includes `[react: emoji]` markers in its response. The markers are stripped from the text and applied as reactions to the message being replied to.
-- **Without replies**: controlled by `reaction_probability`, the bot may react to messages it doesn't reply to with a single emoji.
-
-### Spontaneous messages
-
-If `channels` is configured under `[scheduler]`, the bot sends 1-2 unprompted messages per day at random intervals into one of those channels.
-
-### Backends
-
-- **OpenAI**: uses the Responses API with native server-side web search.
-- **OpenAI-compatible**: uses the Chat Completions API. Works with any compliant host, including local servers like Ollama (`base_url = "http://localhost:11434/v1"`), LM Studio, vLLM, text-generation-webui, and most cloud providers. Requires `base_url`. Falls back to DuckDuckGo for web search.
-- **Gemini**: uses the Google Gemini API via the `google-genai` SDK, with `GoogleSearch` grounding for native search.
-- **Anthropic**: uses the Messages API with streaming, prompt caching, and native server-side web search, web fetch, and code execution. The Anthropic-only knobs (`enable_thinking`, `enable_compaction`, `enable_1m_context`) are on by default and can be toggled in `[backend]`.
+If `channels` is configured under `[scheduler]`, the bot sends messages at random intervals into one of those channels.
 
 ## Example Messages Format
 
-### Text File (.txt)
 Create a `.txt` file with one message per line:
 
 ```text
@@ -102,15 +75,13 @@ Upload via `/upload` or add individually with `/add_message`.
 
 ## Configuration
 
-The bot is configured via `~/.faithful/config.toml`, generated by the wizard. The repo's `config.example.toml` documents every setting for power users who want to hand-edit. Environment variables override their TOML equivalents:
+The bot is configured via `~/.faithful/config.toml`. The repo's `config.example.toml` documents every setting. Environment variables override their TOML equivalents:
 
 | Variable | Overrides |
 |----------|-----------|
 | `DISCORD_TOKEN` | `discord.token` |
 | `ADMIN_USER_IDS` (comma-separated) | `discord.admin_ids` |
 | `API_KEY` | `backend.api_key` |
-
-The legacy `ADMIN_USER_ID` (singular) env var and `admin_user_id` TOML key are still supported as fallbacks.
 
 ### `[discord]`
 
@@ -200,4 +171,4 @@ faithful/
 
 ## License
 
-AGPL :3
+AGPL-3.0-or-later. See LICENSE.

@@ -5,10 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Running the Bot
 
 ```bash
-pip install .                          # install core + all backends
-pip install ".[openai]"                # or just one backend
-cp config.example.toml config.toml     # configure (token + admin_ids required)
-python -m faithful                     # run
+pip install .                  # install core + all backends
+pip install ".[openai]"        # or just one backend
+faithful                       # run interactive setup wizard (writes ~/.faithful/config.toml)
+faithful run                   # start the bot
 ```
 
 For development: `pip install -e ".[dev]"`

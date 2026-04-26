@@ -1,5 +1,11 @@
 # Faithful
 
+[![CI](https://github.com/a9lim/faithful/actions/workflows/ci.yml/badge.svg)](https://github.com/a9lim/faithful/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/faithful)](https://pypi.org/project/faithful/)
+[![Downloads](https://img.shields.io/pypi/dm/faithful)](https://pypi.org/project/faithful/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://pypi.org/project/faithful/)
+
 Faithful is a Discord bot that reads example messages and mimics the author's tone and typing style. It responds when mentioned or replied to, and can optionally post on its own.
 
 ## Features

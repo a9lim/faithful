@@ -36,6 +36,15 @@ def test_prompt_admin_ids_rejects_non_int(monkeypatch):
     assert ids == [111, 222]
 
 
+def test_prompt_admin_ids_rejects_only_commas(monkeypatch, capsys):
+    answers = iter([",,,", "111"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    ids = prompt_admin_ids()
+    assert ids == [111]
+    out = capsys.readouterr().out
+    assert "Need at least one valid ID" in out
+
+
 def test_wizard_state_holds_collected_values():
     state = WizardState()
     state.token = "t"

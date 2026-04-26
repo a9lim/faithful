@@ -63,5 +63,7 @@ def prompt_admin_ids() -> list[int]:
         except ValueError:
             print("Each ID must be an integer (e.g. 123456789012345678).")
             continue
-        if ids:
-            return ids
+        if not ids:
+            print("Need at least one valid ID.")
+            continue
+        return ids

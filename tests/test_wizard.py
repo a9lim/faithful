@@ -98,3 +98,47 @@ def test_prompt_credentials_openai_compatible_requires_base_url(monkeypatch):
     assert api_key == ""
     assert model == "llama3.2"
     assert base_url == "http://localhost:11434/v1"
+
+
+def test_validate_openai_success():
+    from unittest.mock import MagicMock, patch
+
+    from faithful.wizard import validate_credentials
+
+    fake_client = MagicMock()
+    fake_client.models.list.return_value = MagicMock()
+    with patch("openai.OpenAI", return_value=fake_client):
+        err = validate_credentials("openai", "sk-x", "gpt-4o-mini", "")
+    assert err is None
+
+
+def test_validate_openai_failure_returns_string():
+    from unittest.mock import MagicMock, patch
+
+    from faithful.wizard import validate_credentials
+
+    fake_client = MagicMock()
+    fake_client.models.list.side_effect = RuntimeError("401 unauthorized")
+    with patch("openai.OpenAI", return_value=fake_client):
+        err = validate_credentials("openai", "sk-x", "gpt-4o-mini", "")
+    assert err is not None
+    assert "401" in err
+
+
+def test_validate_anthropic_success():
+    from unittest.mock import MagicMock, patch
+
+    from faithful.wizard import validate_credentials
+
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = MagicMock()
+    with patch("anthropic.Anthropic", return_value=fake_client):
+        err = validate_credentials("anthropic", "sk-ant", "claude-haiku-4-5", "")
+    assert err is None
+
+
+def test_validate_openai_compatible_skipped_without_key():
+    from faithful.wizard import validate_credentials
+
+    err = validate_credentials("openai-compatible", "", "llama3.2", "http://x/v1")
+    assert err is None  # nothing to validate

@@ -21,7 +21,7 @@ Backend SDKs are optional — only the active backend's package needs to be inst
 pytest tests/ -v
 ```
 
-162 tests covering config, paths, errors, CLI, verbs, wizard, doctor, onboarding, chat empty-state, chunker, store, tools (MemoryExecutor), prompt, SessionHistory, and backend loading. No linter or CI pipeline configured.
+163 tests covering config, paths, errors, CLI, verbs, wizard, doctor, onboarding, chat empty-state, chunker, store, tools (MemoryExecutor), prompt, SessionHistory, and backend loading. No linter or CI pipeline configured.
 
 ## Configuration
 

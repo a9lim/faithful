@@ -1,4 +1,13 @@
-"""Message delivery — send LLM responses with typing indicators."""
+"""Message delivery — send LLM responses with typing indicators.
+
+Multi-message intent comes from the model calling the ``continue`` tool: each
+generator yield is sent as a single Discord message. The model is responsible
+for shaping its messages -- newlines stay intact and never trigger a split.
+
+The hard 2000-character Discord limit is the only thing that can force a
+single yield to be broken into multiple sends. ``_split_oversized`` is a
+last-resort fallback for that case.
+"""
 
 from __future__ import annotations
 
@@ -13,10 +22,11 @@ _REACTION_PATTERN = re.compile(r"\[react:\s*([^\]]+)\]")
 _MAX_MSG_LEN = 2000
 
 
-def _chunk_text(text: str) -> list[str]:
-    """Split text into Discord-safe chunks (<= 2000 chars).
+def _split_oversized(text: str) -> list[str]:
+    """Fallback splitter for text that exceeds Discord's 2000-char ceiling.
 
-    Splitting priority: newlines -> sentence ends -> spaces -> hard cut.
+    Only invoked when a single yielded message is too long to send as-is.
+    Tries to break on a sentence boundary, then on a space, then hard-cuts.
     """
     if len(text) <= _MAX_MSG_LEN:
         return [text]
@@ -62,11 +72,16 @@ async def send_responses(
     react_target: discord.Message | None = None,
     reply_to: discord.Message | None = None,
 ) -> None:
-    """Send each yielded response as a separate message.
+    """Send each yielded response as a separate Discord message.
 
-    The first chunk replies to *reply_to* if provided. Subsequent chunks
-    are sent as standalone messages. Reactions are collected from all
-    messages and applied to *react_target*.
+    Each ``yield`` from *responses* maps to one Discord message — the model
+    drives multi-message behavior via the ``continue`` tool. Newlines inside
+    a yielded chunk are preserved.
+
+    The first message replies to *reply_to* if provided; subsequent ones are
+    standalone. Reactions are collected from all messages and applied to
+    *react_target*. The 2000-char Discord limit is enforced as a fallback;
+    callers shouldn't rely on it.
     """
     all_reactions: list[str] = []
     first_sent = False
@@ -74,14 +89,19 @@ async def send_responses(
     async for raw_text in responses:
         clean, reactions = extract_reactions(raw_text)
         all_reactions.extend(reactions)
-        if clean:
-            for chunk in _chunk_text(clean):
-                if not first_sent and reply_to:
-                    await reply_to.reply(chunk)
-                    first_sent = True
-                else:
-                    await channel.send(chunk)
-                    first_sent = True
+        if not clean:
+            continue
+
+        # Normal path: one yield = one message. Only split if the model
+        # produced something larger than Discord allows in a single send.
+        pieces = [clean] if len(clean) <= _MAX_MSG_LEN else _split_oversized(clean)
+
+        for piece in pieces:
+            if not first_sent and reply_to:
+                await reply_to.reply(piece)
+            else:
+                await channel.send(piece)
+            first_sent = True
 
     if react_target and all_reactions:
         for emoji in all_reactions:

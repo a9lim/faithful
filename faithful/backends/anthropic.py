@@ -232,13 +232,23 @@ class AnthropicBackend(Backend):
         tool_calls: list[ToolCall] = []
 
         for block in message.content:
-            # Only handle client-side tool_use, not server_tool_use
-            if getattr(block, "type", None) == "tool_use":
-                tool_calls.append(ToolCall(
-                    id=block.id,
-                    name=block.name,
-                    arguments=block.input if isinstance(block.input, dict) else {},
-                ))
+            # Only handle client-side tool_use, not server_tool_use.
+            # The content union holds many block shapes (thinking, server-tool
+            # results, compaction, etc.) that don't carry id/name/input — pull
+            # those fields via getattr so pyright doesn't see attribute access
+            # on the wrong side of the union.
+            if getattr(block, "type", None) != "tool_use":
+                continue
+            block_id = getattr(block, "id", None)
+            block_name = getattr(block, "name", None)
+            if not block_id or not block_name:
+                continue
+            block_input = getattr(block, "input", None)
+            tool_calls.append(ToolCall(
+                id=block_id,
+                name=block_name,
+                arguments=block_input if isinstance(block_input, dict) else {},
+            ))
 
         return text_out, tool_calls
 

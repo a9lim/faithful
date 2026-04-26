@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from openai import AsyncOpenAI
 
@@ -68,9 +68,12 @@ class OpenAICompatibleBackend(Backend):
     ) -> str:
         full = self._build_messages(system_prompt, messages, attachments)
 
+        # Chat Completions expects an Iterable[ChatCompletionMessageParam]
+        # union; our dicts match the runtime shapes but pyright can't narrow
+        # the loose dict[str, Any]. Cast at the SDK boundary.
         response = await self._client.chat.completions.create(
             model=self.config.backend.model or DEFAULT_MODEL,
-            messages=full,
+            messages=cast(Any, full),
             max_tokens=self.config.llm.max_tokens,
             temperature=self.config.llm.temperature,
         )
@@ -102,8 +105,8 @@ class OpenAICompatibleBackend(Backend):
 
         response = await self._client.chat.completions.create(
             model=self.config.backend.model or DEFAULT_MODEL,
-            messages=full,
-            tools=tools,
+            messages=cast(Any, full),
+            tools=cast(Any, tools),
             max_tokens=self.config.llm.max_tokens,
             temperature=self.config.llm.temperature,
         )
@@ -112,11 +115,17 @@ class OpenAICompatibleBackend(Backend):
         text = msg.content or None
         tool_calls: list[ToolCall] = []
 
+        # msg.tool_calls is a union of function-style and custom-style calls;
+        # only function tool calls carry .function.{name,arguments}. Skip
+        # anything else rather than crash on attribute access.
         for tc in msg.tool_calls or []:
-            args = self._parse_json_args(tc.function.arguments)
+            fn = getattr(tc, "function", None)
+            if fn is None:
+                continue
+            args = self._parse_json_args(getattr(fn, "arguments", None))
             tool_calls.append(ToolCall(
                 id=tc.id,
-                name=tc.function.name,
+                name=getattr(fn, "name", "") or "",
                 arguments=args,
             ))
 

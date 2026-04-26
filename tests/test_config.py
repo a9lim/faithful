@@ -19,6 +19,7 @@ from faithful.config import (
     _parse_admin_ids,
     DEFAULT_SYSTEM_PROMPT,
 )
+from faithful.errors import FaithfulConfigError
 
 
 # ── _clamp ──────────────────────────────────────────────
@@ -171,7 +172,7 @@ class TestConfigFromFile:
             min_hours = 6
         """))
 
-        cfg = Config.from_file(toml)
+        cfg = Config.from_file(toml, data_dir=tmp_path / "data")
         assert cfg.discord.token == "test-token"
         assert cfg.discord.admin_ids == [1, 2]
         assert cfg.backend.active == "anthropic"
@@ -184,21 +185,22 @@ class TestConfigFromFile:
         assert cfg.scheduler.channels == [123]
         assert cfg.scheduler.min_hours == 6
 
-    def test_missing_file_uses_defaults(self, tmp_path: Path):
-        cfg = Config.from_file(tmp_path / "nonexistent.toml")
-        assert cfg.backend.active == "openai-compatible"
-        assert cfg.llm.max_tokens == 16000
+    def test_missing_file_raises(self, tmp_path: Path):
+        with pytest.raises(FaithfulConfigError):
+            Config.from_file(tmp_path / "nonexistent.toml", data_dir=tmp_path / "data")
 
     def test_validate_missing_token(self, tmp_path: Path):
-        cfg = Config.from_file(tmp_path / "nonexistent.toml")
-        with pytest.raises(ValueError, match="Discord token required"):
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("")
+        cfg = Config.from_file(config_path, data_dir=tmp_path / "data")
+        with pytest.raises(FaithfulConfigError, match="discord.token"):
             cfg.validate()
 
     def test_validate_missing_admin_ids(self, tmp_path: Path):
         toml = tmp_path / "config.toml"
         toml.write_text('[discord]\ntoken = "tok"\n')
-        cfg = Config.from_file(toml)
-        with pytest.raises(ValueError, match="Admin IDs required"):
+        cfg = Config.from_file(toml, data_dir=tmp_path / "data")
+        with pytest.raises(FaithfulConfigError, match="discord.admin_ids"):
             cfg.validate()
 
     def test_validate_missing_api_key(self, tmp_path: Path):
@@ -211,8 +213,8 @@ class TestConfigFromFile:
             [backend]
             active = "anthropic"
         """))
-        cfg = Config.from_file(toml)
-        with pytest.raises(ValueError, match="API key required"):
+        cfg = Config.from_file(toml, data_dir=tmp_path / "data")
+        with pytest.raises(FaithfulConfigError):
             cfg.validate()
 
     def test_validate_api_key_not_required_for_openai_compat(self, tmp_path: Path):
@@ -226,7 +228,7 @@ class TestConfigFromFile:
             active = "openai-compatible"
             base_url = "http://localhost:11434/v1"
         """))
-        cfg = Config.from_file(toml)
+        cfg = Config.from_file(toml, data_dir=tmp_path / "data")
         # Should not raise — openai-compatible doesn't need an API key
         cfg.validate()
 
@@ -241,22 +243,70 @@ class TestConfigFromFile:
             [llm]
             temperature = 99.0
         """))
-        cfg = Config.from_file(toml)
+        cfg = Config.from_file(toml, data_dir=tmp_path / "data")
         assert cfg.llm.temperature == 1.0  # clamped back to default
 
 
 class TestConfigEnvOverrides:
     def test_discord_token_env(self, tmp_path: Path, monkeypatch):
         monkeypatch.setenv("DISCORD_TOKEN", "env-token")
-        cfg = Config.from_file(tmp_path / "nonexistent.toml")
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("")
+        cfg = Config.from_file(config_path, data_dir=tmp_path / "data")
         assert cfg.discord.token == "env-token"
 
     def test_api_key_env(self, tmp_path: Path, monkeypatch):
         monkeypatch.setenv("API_KEY", "env-key")
-        cfg = Config.from_file(tmp_path / "nonexistent.toml")
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("")
+        cfg = Config.from_file(config_path, data_dir=tmp_path / "data")
         assert cfg.backend.api_key == "env-key"
 
     def test_admin_ids_env(self, tmp_path: Path, monkeypatch):
         monkeypatch.setenv("ADMIN_USER_IDS", "10,20,30")
-        cfg = Config.from_file(tmp_path / "nonexistent.toml")
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("")
+        cfg = Config.from_file(config_path, data_dir=tmp_path / "data")
         assert cfg.discord.admin_ids == [10, 20, 30]
+
+
+# ── New contract tests ──────────────────────────────────
+
+def test_from_file_requires_explicit_path_and_data_dir(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '[discord]\ntoken = "x"\nadmin_ids = [1]\n'
+        '[backend]\napi_key = "k"\nmodel = "m"\n'
+    )
+    data_dir = tmp_path / "data"
+
+    cfg = Config.from_file(config_path, data_dir=data_dir)
+
+    assert cfg.data_dir == data_dir
+    assert cfg.discord.token == "x"
+    assert cfg.discord.admin_ids == [1]
+
+
+def test_from_file_raises_faithful_config_error_on_bad_toml(tmp_path):
+    bad = tmp_path / "config.toml"
+    bad.write_text("[discord\ntoken = 'x'\n")
+
+    with pytest.raises(FaithfulConfigError) as exc:
+        Config.from_file(bad, data_dir=tmp_path / "data")
+
+    msg = str(exc.value)
+    assert str(bad) in msg
+    assert ":" in msg  # contains line:col
+
+
+def test_validate_raises_faithful_config_error_with_next_step(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("")
+    cfg = Config.from_file(config_path, data_dir=tmp_path / "data")
+
+    with pytest.raises(FaithfulConfigError) as exc:
+        cfg.validate()
+
+    msg = str(exc.value)
+    assert "discord.token" in msg
+    assert "faithful" in msg  # mentions the CLI as a next step

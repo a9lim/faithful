@@ -11,9 +11,9 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
-log = logging.getLogger("faithful.config")
+from .errors import FaithfulConfigError
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
+log = logging.getLogger("faithful.config")
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are {name}. Here's how {name} talks:\n\n"
@@ -31,9 +31,16 @@ DEFAULT_SYSTEM_PROMPT = (
 
 def _load_toml(path: Path) -> dict:
     if not path.exists():
-        return {}
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+        raise FaithfulConfigError(
+            f"No config found at {path}. Run 'faithful' to set up, or pass --config <path>."
+        )
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        # tomllib's error message looks like "Invalid statement (at line 3, column 5)"
+        # so we just include the original message verbatim with the path prefix.
+        raise FaithfulConfigError(f"{path}: invalid TOML — {e}") from e
 
 
 def _clamp(value: float, lo: float, hi: float, name: str, default: float) -> float:
@@ -153,28 +160,17 @@ class Config:
     behavior: BehaviorConfig = field(default_factory=BehaviorConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 
-    data_dir: Path = field(
-        default_factory=lambda: Path(__file__).resolve().parent.parent / "data"
-    )
+    data_dir: Path = field(default_factory=Path)  # required; supplied by caller
 
     @classmethod
-    def from_file(cls, path: Path | None = None) -> Config:
-        """Load configuration from a TOML file, merging over defaults.
-
-        Environment variables override ``discord.token`` (``DISCORD_TOKEN``),
-        ``discord.admin_ids`` (``ADMIN_USER_IDS`` or ``ADMIN_USER_ID``),
-        and ``backend.api_key`` (``API_KEY``).
-        """
-        config_path = path or _CONFIG_PATH
-        raw = _load_toml(config_path)
-
-        # Handle legacy flat keys by mapping them into nested dicts
+    def from_file(cls, path: Path, *, data_dir: Path) -> "Config":
+        """Load configuration from a TOML file. Raises FaithfulConfigError on parse errors."""
+        raw = _load_toml(path)
         raw = _migrate_legacy_keys(raw)
 
-        config = cls()
+        config = cls(data_dir=data_dir)
         _merge_dataclass(config, raw)
 
-        # Re-run validation after merge (setattr bypasses __post_init__)
         config.discord.__post_init__()
         config.backend.__post_init__()
         config.llm.__post_init__()
@@ -183,23 +179,26 @@ class Config:
         return config
 
     def __post_init__(self) -> None:
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        # data_dir creation happens lazily — caller decides when (e.g. only on `run`)
+        pass
 
     def validate(self) -> None:
-        """Validate that required fields are present. Call after from_file()."""
+        """Validate that required fields are present. Raises FaithfulConfigError."""
         if not self.discord.token:
-            raise ValueError(
-                "Discord token required: set discord.token in config.toml or DISCORD_TOKEN env var"
+            raise FaithfulConfigError(
+                "Missing required field: discord.token. "
+                "Edit ~/.faithful/config.toml or run 'faithful' to redo setup "
+                "(delete the existing config first)."
             )
         if not self.discord.admin_ids:
-            raise ValueError(
-                "Admin IDs required: set discord.admin_ids in config.toml or ADMIN_USER_IDS env var"
+            raise FaithfulConfigError(
+                "Missing required field: discord.admin_ids. "
+                "Add your Discord user ID(s) to ~/.faithful/config.toml."
             )
-        # Backends other than openai-compatible require an API key
         if self.backend.active != "openai-compatible" and not self.backend.api_key:
-            raise ValueError(
-                f"API key required for '{self.backend.active}' backend: "
-                "set backend.api_key in config.toml or API_KEY env var"
+            raise FaithfulConfigError(
+                f"Missing API key for backend '{self.backend.active}'. "
+                "Set backend.api_key in ~/.faithful/config.toml or the API_KEY env var."
             )
 
 

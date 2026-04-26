@@ -1,6 +1,5 @@
 """Tests for the onboarding cog."""
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import discord

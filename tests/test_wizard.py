@@ -1,7 +1,5 @@
 """Tests for the interactive wizard."""
-from io import StringIO
 
-import pytest
 
 from faithful.wizard import (
     WizardState,
@@ -197,7 +195,6 @@ def test_build_invite_url_returns_none_on_garbage():
     assert build_invite_url("not-a-valid-token") is None
 
 
-from pathlib import Path
 
 from faithful.paths import ResolvedPaths
 from faithful.wizard import run_wizard

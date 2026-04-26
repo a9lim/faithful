@@ -1,5 +1,8 @@
-# Faithful Discord Bot Configuration
-# Copy this file to config.toml and fill in your values.
+# Reference config for faithful.
+#
+# You typically don't need to write this by hand — run `faithful` with no
+# config and the wizard will generate ~/.faithful/config.toml for you.
+# This file documents every setting for power users who want to hand-edit.
 
 [discord]
 token = ""            # Required: your Discord bot token

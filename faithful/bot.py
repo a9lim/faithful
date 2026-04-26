@@ -47,6 +47,7 @@ class Faithful(commands.Bot):
         await self.load_extension("faithful.cogs.admin")
         await self.load_extension("faithful.cogs.chat")
         await self.load_extension("faithful.cogs.scheduler")
+        await self.load_extension("faithful.cogs.onboarding")
 
         examples = self.store.list_messages()
         if examples:

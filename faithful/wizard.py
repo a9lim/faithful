@@ -198,10 +198,14 @@ def validate_credentials(
 import base64
 from datetime import date
 
-# Permissions integer: View Channel | Send Messages | Read Message History |
-# Add Reactions | Use External Emojis. Reverify against current Discord docs
-# during implementation.
-_INVITE_PERMISSIONS = 274877966400
+# Discord OAuth permissions integer. Bits used:
+#   View Channel          (1 << 10) =   1024
+#   Send Messages         (1 << 11) =   2048
+#   Add Reactions         (1 <<  6) =     64
+#   Read Message History  (1 << 16) =  65536
+#   Use External Emojis   (1 << 18) = 262144
+# Sum: 330816 (= 0x50C40)
+_INVITE_PERMISSIONS = 330816
 
 
 def render_config_toml(state: WizardState) -> str:

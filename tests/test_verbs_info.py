@@ -1,5 +1,4 @@
 """Tests for the `info` verb."""
-import os
 
 from faithful.paths import ResolvedPaths
 from faithful.verbs import info

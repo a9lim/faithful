@@ -1,0 +1,81 @@
+name: Bug report
+description: Something broke, crashed, or behaved wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what did you get?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Active backend
+      description: Value of `[backend] active` in your `config.toml`
+      options:
+        - openai
+        - openai-compatible
+        - gemini
+        - anthropic
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Value of `[backend] model` (e.g. `gpt-4o-mini`, `claude-sonnet-4-5`, `gemini-2.0-flash`, `llama3`)
+      placeholder: gpt-4o-mini
+    validations:
+      required: true
+
+  - type: input
+    id: faithful-version
+    attributes:
+      label: faithful version
+      description: Output of `pip show faithful | grep Version`
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The shortest sequence of Discord messages or commands that reproduces the issue
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback or log output
+      description: Please redact your bot token and API keys before pasting
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: Any non-default `config.toml` settings that might be relevant. Please redact `discord.token` and `backend.api_key`.
+      render: toml

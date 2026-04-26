@@ -1,9 +1,9 @@
 """Tests for CLI argument parsing and dispatch."""
-from pathlib import Path
 
 import pytest
 
 from faithful.cli import build_parser, main
+from faithful.errors import FaithfulConfigError
 
 
 def test_help_does_not_crash(capsys):
@@ -38,7 +38,6 @@ def test_no_args_means_setup(monkeypatch):
 
 
 def test_friendly_error_prints_to_stderr_and_returns_1(monkeypatch, capsys):
-    from faithful.errors import FaithfulConfigError
 
     def boom(args, paths):
         raise FaithfulConfigError("nope")
@@ -50,7 +49,6 @@ def test_friendly_error_prints_to_stderr_and_returns_1(monkeypatch, capsys):
     assert "nope" in err
 
 
-from faithful.errors import FaithfulConfigError
 
 
 def test_setup_verb_errors_when_config_exists(tmp_path, monkeypatch):

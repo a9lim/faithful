@@ -1,5 +1,5 @@
 """Tests for the doctor verb."""
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

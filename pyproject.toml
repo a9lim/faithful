@@ -1,19 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "faithful"
 version = "1.0.0"
 description = "A Discord chatbot that emulates the tone and typing style of provided example messages."
 readme = "README.md"
-license = { file = "LICENSE" }
 requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [
+    { name = "a9lim", email = "mx@a9l.im" },
+]
 keywords = ["discord", "discord-bot", "llm", "chatbot", "persona"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Framework :: AsyncIO",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -43,15 +51,35 @@ dev = [
     "anthropic>=0.40",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    "ruff>=0.6.9",
+    "build>=1.0",
+    "twine>=5.0",
 ]
 
 [project.scripts]
 faithful = "faithful.cli:main"
 
+# URL labels here are the ones PyPI's sidebar specifically renders with
+# icons (Source, Issues, Changelog, Documentation); other labels render
+# as plain text links.
 [project.urls]
-Homepage = "https://github.com/a9lim/faithful"
-Repository = "https://github.com/a9lim/faithful"
-Issues = "https://github.com/a9lim/faithful/issues"
+Homepage      = "https://github.com/a9lim/faithful"
+Source        = "https://github.com/a9lim/faithful"
+Issues        = "https://github.com/a9lim/faithful/issues"
+Changelog     = "https://github.com/a9lim/faithful/releases"
+Documentation = "https://github.com/a9lim/faithful#readme"
 
 [tool.setuptools.packages.find]
 include = ["faithful*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# E501 (line too long): system prompts and example strings are intentionally
+# long.  E741 (ambiguous variable name) and E731 (lambda assignment):
+# conventional in tight scripting.  E402 (module level import not at top):
+# tomllib is gated behind a try/except for 3.10 compatibility.
+select = ["E", "F", "W"]
+ignore = ["E501", "E741", "E402", "E731"]

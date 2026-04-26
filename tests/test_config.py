@@ -9,11 +9,8 @@ import pytest
 
 from faithful.config import (
     Config,
-    DiscordConfig,
-    BackendConfig,
     BehaviorConfig,
     LLMConfig,
-    SchedulerConfig,
     _merge_dataclass,
     _clamp,
     _parse_admin_ids,

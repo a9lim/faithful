@@ -1,7 +1,6 @@
 """Tests for path resolution."""
 from pathlib import Path
 
-import pytest
 
 from faithful.paths import ResolvedPaths, ensure_home_exists, resolve_paths
 

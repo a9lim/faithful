@@ -4,7 +4,6 @@ Filled in across the next several tasks.
 """
 from __future__ import annotations
 
-from .errors import FaithfulError
 from .paths import ResolvedPaths
 
 

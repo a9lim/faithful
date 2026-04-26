@@ -27,35 +27,16 @@ A Discord bot that reads a corpus of example messages and emulates the author's 
 
 ## Quick Start
 
-### 1. Clone and install
-
 ```bash
-git clone <this-repo-url>
-cd faithful
-pip install .
+pip install faithful
+faithful                  # run the interactive setup wizard
+faithful run              # start the bot
 ```
 
-Or install in development mode:
+The wizard writes `~/.faithful/config.toml`. Run `faithful doctor` any time to
+check connectivity, or `faithful info` to see where things live.
 
-```bash
-pip install -e .
-```
-
-### 2. Configure
-
-Copy the example config and fill in your values:
-
-```bash
-cp config.example.toml config.toml
-```
-
-At minimum, set `token` and `admin_ids` under `[discord]`. To use an LLM backend, set `active`, `api_key`, and `model` under `[backend]`.
-
-### 3. Run
-
-```bash
-python -m faithful
-```
+Override paths with `--config <path>`, `--data-dir <path>`, or `FAITHFUL_HOME=/some/dir`.
 
 ## Commands
 

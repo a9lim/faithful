@@ -54,7 +54,7 @@ class Faithful(commands.Bot):
             await self.backend.setup(examples)
             log.info(
                 "Backend '%s' initialised with %d examples.",
-                self.config.active_backend,
+                self.config.backend.active,
                 self.store.count,
             )
         else:

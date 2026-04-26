@@ -38,7 +38,24 @@ def info(paths: ResolvedPaths) -> int:
 
 
 def run(paths: ResolvedPaths) -> int:
-    raise FaithfulError("run not implemented yet")
+    import logging
+
+    from .bot import Faithful
+    from .config import Config
+    from .paths import ensure_home_exists
+
+    ensure_home_exists(paths)
+    cfg = Config.from_file(paths.config_path, data_dir=paths.data_dir)
+    cfg.validate()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(name)-12s | %(levelname)-8s | %(message)s",
+    )
+
+    bot = Faithful(cfg)
+    bot.run(cfg.discord.token, log_handler=None)
+    return 0
 
 
 def doctor(paths: ResolvedPaths) -> int:

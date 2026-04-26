@@ -16,7 +16,7 @@ class MessageStore:
 
     def __init__(self, config: "Config") -> None:
         self.config = config
-        self._dir: Path = config.data_dir
+        self._dir: Path = config.data_dir / "persona"
         self._messages: list[str] = []
         self._source_map: list[tuple[Path, int]] = []
         self.reload()

@@ -56,7 +56,9 @@ class Admin(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         filename = file.filename.replace("/", "_").replace("\\", "_")
-        target_path = self.bot.config.data_dir / filename
+        target_dir = self.bot.store.persona_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / filename
 
         await file.save(target_path)
         self.bot.store.reload()

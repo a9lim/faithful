@@ -34,7 +34,7 @@ If you don't want any of this, please leave `enable_web_search` and `enable_memo
 
 ## Admin commands
 
-All Discord slash commands (`/upload`, `/add_message`, `/clear_messages`, `/memory`, `/status`, `/generate_test`, and the rest) are restricted to the user IDs listed in `[discord] admin_ids` in your config. 
+All admin Discord slash commands (`/upload`, `/add_message`, `/clear_messages`, `/status`, `/generate_test`, and the rest) are restricted to the user IDs listed in `[discord] admin_ids` in your config. The public `/help` command is the only slash command available to non-admins.
 
 ## Model and provider trust
 

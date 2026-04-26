@@ -21,7 +21,7 @@ Faithful is a Discord bot that reads example messages and mimics the author's to
 - **Memory**: optionally remembers facts about users and channels across conversations 
 - **Reactions**: optionally reacts to messages with emojis including custom ones
 - **Random posts**: optionally sends a few messages per day into a configured channel
-- **Random replies**: optionally replies to any message in configured channels
+- **Random replies**: optionally replies to any message at a configurable probability
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ If you want a slimmer install, the per-backend extras are `[openai]`, `[gemini]`
 
 ## Commands
 
-All commands are slash commands and only usable by users listed in `admin_ids`.
+The admin commands are slash commands restricted to users listed in `admin_ids`.
 
 | Command | Description |
 |---------|-------------|
@@ -54,18 +54,20 @@ All commands are slash commands and only usable by users listed in `admin_ids`.
 | `/download_messages` | Download all messages as a `.txt` file |
 | `/generate_test <prompt>` | Manually trigger a response test |
 | `/status` | Show detailed configuration status |
-| `/memory list <target> [user]` | List memories for a user or channel |
-| `/memory add <target> <text> [user]` | Add a memory for a user or channel |
-| `/memory remove <target> <index> [user]` | Remove a memory by index |
-| `/memory clear <target> [user]` | Clear all memories for a user or channel |
+
+`/help` is available to anyone in the server and lists the commands above.
 
 You can also right-click any message and use the **Add to Persona** context menu to add it directly as an example.
 
+When `enable_memory` is on, the bot manages per-channel memory automatically through the LLM's memory tool. There are no memory slash commands.
+
 ## How It Works
 
-The bot responds when pinged or in chat, ignoring replies to messages older than 5 minutes (configurable).
-The bot can react to messages with emoji, including server custom emoji. Reactions happen in two ways:
-If `channels` is configured under `[scheduler]`, the bot sends messages at random intervals into one of those channels.
+The bot responds when mentioned, when replied to, when an active conversation is in progress, or randomly based on `reply_probability`. A reply to a bot message only counts as active if the original message is newer than `conversation_expiry` (default 300 seconds).
+
+The bot can react to messages with emoji, including server custom emoji. Reactions happen in two ways: the LLM can include `[react: emoji]` markers at the end of a response, and on messages where the bot does not reply, it may still react based on `reaction_probability`.
+
+If `channels` is configured under `[scheduler]`, the bot sends spontaneous messages at random intervals between `min_hours` and `max_hours` into one of those channels.
 
 ## Example Messages Format
 

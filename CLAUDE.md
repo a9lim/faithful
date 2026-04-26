@@ -21,7 +21,7 @@ Backend SDKs are optional — only the active backend's package needs to be inst
 pytest tests/ -v
 ```
 
-163 tests covering config, paths, errors, CLI, verbs, wizard, doctor, onboarding, chat empty-state, chunker, store, tools (MemoryExecutor), prompt, SessionHistory, and backend loading. No linter or CI pipeline configured.
+163 tests covering config, paths, errors, CLI, verbs, wizard, doctor, onboarding, chat empty-state, chunker, store, tools (MemoryExecutor), prompt, SessionHistory, and backend loading. CI runs `ruff check .` and `pytest tests/ -q` on push to `main`/`dev` and on PRs to `main` (`.github/workflows/ci.yml`); the `build` job also produces sdist + wheel via `python -m build`.
 
 ## Configuration
 
@@ -41,6 +41,7 @@ Notable config fields:
 - `[behavior] enable_web_search` and `enable_memory` default to `false` -- zero behavior change without opt-in
 - `[backend] enable_thinking` (default true), `enable_compaction` (default true), `enable_1m_context` (default true) -- Anthropic-specific features; ignored by other backends
 - `[behavior] max_session_messages` (default 50) -- per-channel session history window (all backends)
+- `[behavior] max_continues` (default 5) -- max times the model can call the `continue` tool to send follow-up messages in one turn
 - `[llm] max_tokens` (default 16000) -- max response tokens for all backends
 
 All LLM providers share two config fields: `api_key` and `model` under `[backend]`. Provider-specific options (`base_url` for openai-compatible) are optional. `base_url` is required for the openai-compatible backend. Local models via Ollama use the openai-compatible backend with `base_url = "http://localhost:11434/v1"`.
@@ -54,7 +55,7 @@ Faithful is a Discord bot that emulates a persona by learning from example messa
 1. **`cogs/chat.py`** receives a Discord message, decides whether to respond (mention, reply, active conversation, or random chance), and starts a debounced task. If not replying, `_maybe_react()` may trigger a standalone reaction.
 2. **`prompt.py`** assembles a `GenerationRequest` -- slices history from the last @mention, samples examples from the store, injects custom emoji list via `get_guild_emojis()`, and formats the system prompt.
 3. The active **backend** generates a response from the `GenerationRequest`, using **session history** (per-channel, sliding window with expiry) to maintain context across turns, including tool-call/tool-result pairs.
-4. **`chunker.py`** calls `extract_reactions()` to strip `[react: emoji]` markers, splits clean text into Discord-safe chunks (<=2000 chars) via `_chunk_text()`, sends them via `send_responses()` (first chunk replies to the original message, rest are standalone), and applies extracted reactions to the prompt message.
+4. **`chunker.py`** calls `extract_reactions()` to strip `[react: emoji]` markers and sends each yield from the backend's async generator as one Discord message via `send_responses()` (first message replies to the original, rest are standalone). `_split_oversized()` is a fallback splitter only invoked when a single yield exceeds Discord's 2000-char ceiling. Multi-message intent is driven by the model calling the `continue` tool, not by chunk-splitting. Extracted reactions are applied to the prompt message.
 
 ### Backend System
 
@@ -63,7 +64,7 @@ All backends extend the single `Backend` ABC in `backends/base.py`. There is no 
 - `_call_with_tools(system_prompt, messages, tools, attachments)` -- call API with tools, return `(text, list[ToolCall])`
 - `_append_tool_result(messages, call, result)` -- append tool result in provider format
 
-The tool loop lives in `Backend._generate_with_tools()` (max 5 rounds). It's only invoked when `_get_active_tools()` returns tools (memory tools, or DuckDuckGo web search for backends without native search).
+The tool loop lives in `Backend._generate_with_tools()` and runs up to `MAX_TOOL_ROUNDS + max_continues` iterations (default 5 + 5 = 10). The loop always runs because `TOOL_CONTINUE` is always appended in `_get_active_tools()`; the memory and web-search tools are only added when `enable_memory` or `enable_web_search` are on (and the backend lacks a native equivalent).
 
 **Session history:** `Backend` maintains a `_sessions: dict[int, SessionHistory]` keyed by channel ID. `SessionHistory` stores messages in a provider-agnostic format (including tool-call/tool-result pairs). On cold start, sessions are seeded from Discord-fetched history; on subsequent turns, the session is the source of truth. Sessions expire after `conversation_expiry` seconds of inactivity and are trimmed to `max_session_messages`. Tool interactions are stored via `_store_tool_round()` in a synthetic format (`tool_calls` key, `tool_results` role) that all backends filter out when building API-specific messages.
 
@@ -86,11 +87,11 @@ Each LLM API handles system prompts differently:
 
 **Server-side tools (OpenAI, Gemini):** OpenAI uses `web_search_preview` and Gemini uses `GoogleSearch` grounding for native web search. Both set `_has_native_server_tools = True` so `_get_active_tools()` skips client-side web tools.
 
-**Client-side web tools:** The openai-compatible backend falls back to DuckDuckGo search and `aiohttp`-based web fetch (`TOOL_WEB_SEARCH`, `TOOL_WEB_FETCH` in `tools.py`) through the client-side tool loop.
+**Client-side web tools:** The openai-compatible backend falls back to DuckDuckGo search and `aiohttp`-based web fetch (`TOOL_WEB_SEARCH`, `TOOL_WEB_FETCH` in `tools/definitions.py`) through the client-side tool loop.
 
-**Memory tool:** Uses Anthropic's file-based CRUD model (`memory_20250818`) across all backends. Claude manages plain files in `data/memories/` with commands: `view`, `create`, `str_replace`, `insert`, `delete`, `rename`. The `MemoryExecutor` class in `tools.py` handles execution with path traversal protection. Anthropic gets the native tool type; other backends get `TOOL_MEMORY` as a client-side tool (controlled by `_has_native_memory` flag). For non-Anthropic backends, a memory protocol instruction is injected into the system prompt.
+**Memory tool:** Uses Anthropic's file-based CRUD model (`memory_20250818`) across all backends. Claude manages plain files in `data/memories/` with commands: `view`, `create`, `str_replace`, `insert`, `delete`, `rename`. The `MemoryExecutor` class in `tools/memory.py` handles execution with path traversal protection. Anthropic gets the native tool type; other backends get `TOOL_MEMORY` as a client-side tool (controlled by `_has_native_memory` flag). For non-Anthropic backends, a memory protocol instruction is injected into the system prompt.
 
-Provider-agnostic tool definitions live in `tools.py`. `ToolExecutor` dispatches calls to `MemoryExecutor`, DuckDuckGo search, or aiohttp web fetch.
+Provider-agnostic tool definitions live in `tools/definitions.py`. `ToolExecutor` (in `tools/executor.py`) dispatches calls to `MemoryExecutor`, DuckDuckGo search, or aiohttp web fetch.
 
 ### Reactions
 
@@ -104,7 +105,7 @@ Responses can include `[react: emoji]` markers at the end. The flow:
 
 ### Memory System
 
-Plain file storage in `data/memories/`. Claude organizes files however it wants -- no imposed structure. `MemoryExecutor` in `tools.py` executes file CRUD commands matching Anthropic's documented memory tool interface. Path traversal is blocked via `pathlib.Path.resolve()` + `relative_to()`. The directory is created on startup when `enable_memory` is true (`bot.py` sets `backend.memory_base_dir`).
+Plain file storage in `data/memories/`. Claude organizes files however it wants -- no imposed structure. `MemoryExecutor` in `tools/memory.py` executes file CRUD commands matching Anthropic's documented memory tool interface. Path traversal is blocked via `pathlib.Path.resolve()` + `relative_to()`. The directory is created on startup when `enable_memory` is true (`bot.py` sets `backend.memory_base_dir`).
 
 ### Admin Commands
 

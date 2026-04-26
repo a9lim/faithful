@@ -105,6 +105,11 @@ class MessageStore:
         self.reload()
         return count
 
+    @property
+    def persona_dir(self) -> Path:
+        """The directory MessageStore reads .txt files from."""
+        return self._dir
+
     def list_messages(self) -> list[str]:
         return list(self._messages)
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faithful"
-version = "1.0.0"
+version = "1.0.1"
 description = "A Discord chatbot that emulates the tone and typing style of provided example messages."
 readme = "README.md"
 requires-python = ">=3.10"

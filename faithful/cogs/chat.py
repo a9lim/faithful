@@ -26,6 +26,11 @@ _REACTION_PROMPT = (
     "Message: {message}"
 )
 
+EMPTY_STATE_TEXT = (
+    "I don't have any example messages to learn from yet. "
+    "An admin can use `/upload` or `/add_message` to teach me."
+)
+
 
 class Chat(commands.Cog):
     """Listens to messages and responds in-character."""
@@ -132,6 +137,15 @@ class Chat(commands.Cog):
             return
 
         if self.bot.store.count == 0:
+            # Direct invocations get a friendly empty-state reply; random
+            # triggers stay silent (don't burn API credits to say nothing).
+            is_dm = message.guild is None
+            is_mentioned = self._is_mentioned(message)
+            if is_dm or is_mentioned:
+                try:
+                    await message.reply(EMPTY_STATE_TEXT)
+                except discord.DiscordException:
+                    log.exception("Failed to send empty-state reply")
             return
 
         is_dm = message.guild is None

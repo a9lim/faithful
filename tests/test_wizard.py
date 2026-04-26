@@ -195,3 +195,80 @@ def test_build_invite_url_extracts_app_id():
 
 def test_build_invite_url_returns_none_on_garbage():
     assert build_invite_url("not-a-valid-token") is None
+
+
+from pathlib import Path
+
+from faithful.paths import ResolvedPaths
+from faithful.wizard import run_wizard
+
+
+def test_run_wizard_writes_config_with_0600_mode(tmp_path, monkeypatch):
+    paths = ResolvedPaths(
+        home=tmp_path,
+        config_path=tmp_path / "config.toml",
+        data_dir=tmp_path / "data",
+    )
+
+    inputs = iter([
+        "111,222",        # admin IDs
+        "1",              # backend = openai
+        "",               # model = default
+    ])
+    # Token first segment is base64url("123456789012345678"), so build_invite_url parses it.
+    secrets = iter([
+        "MTIzNDU2Nzg5MDEyMzQ1Njc4.AAAA.BBBB",  # token
+        "sk-test",                              # api_key
+    ])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(secrets))
+    monkeypatch.setattr(
+        "faithful.wizard.validate_credentials",
+        lambda *a, **kw: None,
+    )
+
+    code = run_wizard(paths, quick=True, no_validate=False)
+
+    assert code == 0
+    assert paths.config_path.is_file()
+    contents = paths.config_path.read_text()
+    assert 'token = "MTIzNDU2Nzg5MDEyMzQ1Njc4.AAAA.BBBB"' in contents
+    assert 'admin_ids = [111, 222]' in contents
+    mode = paths.config_path.stat().st_mode & 0o777
+    assert mode == 0o600
+
+
+def test_run_wizard_skips_invite_url_when_quick(tmp_path, monkeypatch, capsys):
+    paths = ResolvedPaths(
+        home=tmp_path,
+        config_path=tmp_path / "config.toml",
+        data_dir=tmp_path / "data",
+    )
+    inputs = iter(["1", "1", ""])
+    secrets = iter(["MTIzNDU2Nzg5MDEyMzQ1Njc4.AAAA.BBBB", "k"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(secrets))
+    monkeypatch.setattr("faithful.wizard.validate_credentials", lambda *a, **kw: None)
+
+    run_wizard(paths, quick=True, no_validate=False)
+
+    out = capsys.readouterr().out
+    assert "discord.com/api/oauth2" not in out
+
+
+def test_run_wizard_prints_invite_url_when_not_quick(tmp_path, monkeypatch, capsys):
+    paths = ResolvedPaths(
+        home=tmp_path,
+        config_path=tmp_path / "config.toml",
+        data_dir=tmp_path / "data",
+    )
+    inputs = iter(["1", "1", ""])
+    secrets = iter(["MTIzNDU2Nzg5MDEyMzQ1Njc4.AAAA.BBBB", "k"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: next(secrets))
+    monkeypatch.setattr("faithful.wizard.validate_credentials", lambda *a, **kw: None)
+
+    run_wizard(paths, quick=False, no_validate=False)
+
+    out = capsys.readouterr().out
+    assert "discord.com/api/oauth2" in out

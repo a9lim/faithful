@@ -63,4 +63,13 @@ def doctor(paths: ResolvedPaths) -> int:
 
 
 def setup(paths: ResolvedPaths, *, quick: bool = False, no_validate: bool = False) -> int:
-    raise FaithfulError("setup not implemented yet")
+    from .errors import FaithfulConfigError
+    from .wizard import run_wizard
+
+    if paths.config_path.is_file():
+        raise FaithfulConfigError(
+            f"Already configured at {paths.config_path}. "
+            "Run 'faithful run' to start the bot. "
+            "(Delete the file and re-run 'faithful' to redo setup.)"
+        )
+    return run_wizard(paths, quick=quick, no_validate=no_validate)

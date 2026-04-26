@@ -48,3 +48,33 @@ def test_friendly_error_prints_to_stderr_and_returns_1(monkeypatch, capsys):
     assert code == 1
     err = capsys.readouterr().err
     assert "nope" in err
+
+
+from faithful.errors import FaithfulConfigError
+
+
+def test_setup_verb_errors_when_config_exists(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("# placeholder\n")
+    monkeypatch.setenv("FAITHFUL_HOME", str(tmp_path))
+
+    code = main([])  # bare faithful
+
+    assert code == 1  # FaithfulError caught by main
+
+
+def test_setup_verb_runs_wizard_when_no_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("FAITHFUL_HOME", str(tmp_path))
+
+    called = {}
+
+    def fake_setup(paths, *, quick, no_validate):
+        called["paths"] = paths
+        return 0
+
+    monkeypatch.setattr("faithful.verbs.setup", fake_setup)
+
+    code = main([])
+
+    assert code == 0
+    assert called["paths"].home == tmp_path
